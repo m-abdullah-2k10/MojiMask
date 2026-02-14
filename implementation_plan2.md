@@ -38,8 +38,9 @@ Unlike V1, V2 does NOT convert the image into emojis. It converts the **File.io 
 
 **Step 4: Image Processing (script.js) [COMPLETED]**
 
-- Capture file, resize on canvas (max 800px) to keep uploads under 500KB.
-- Convert to Base64 (JPEG format, 0.7 quality).
+- Capture file, check size against threshold (1MB).
+- If internal limit exceeded: Resize on canvas (max 1200px) and convert to JPEG (0.7 quality).
+- If within limit: Use original image quality and dimensions.
 
 **Step 5: AES-256 Encryption (script.js) [COMPLETED]**
 

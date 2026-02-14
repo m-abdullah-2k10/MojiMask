@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Emoji Spy | Phantom Image Gallery</title>
+    <title>MojiMask | Phantom Image Gallery</title>
     <meta name="description" content="Securely share images with end-to-end encryption. Encrypt your photos into emojis and share them with a self-destructing link.">
     
     <!-- SEO Meta Tags -->
-    <meta property="og:title" content="Emoji Spy - Phantom Gallery">
+    <meta property="og:title" content="MojiMask - Phantom Gallery">
     <meta property="og:description" content="Secure, ephemeral, and encrypted image sharing.">
     <meta property="og:type" content="website">
     
@@ -25,8 +25,8 @@
     
     <main class="app-container" id="main-app">
         <header class="hero-section">
-            <h1 class="glitch-text" data-text="EMOJI SPY">EMOJI SPY</h1>
-            <p class="subtitle">Phantom Gallery Intelligence Tool</p>
+            <h1 class="glitch-text" data-text="MojiMask">MojiMask</h1>
+            <p class="subtitle">Image To Emoji Encryption Tool </p>
         </header>
 
         <nav class="mode-toggle">
@@ -45,25 +45,25 @@
             <section class="pane sender-pane active" id="sender-section">
                 <div class="pane-header">
                     <span class="icon">🔒</span>
-                    <h2>Agent Sender</h2>
+                    <h2>Encrypt Image</h2>
                 </div>
                 
                 <div class="input-group">
-                    <label for="image-picker">Capture Intelligence (Image)</label>
+                    <label for="image-picker">Upload an image</label>
                     <div class="file-drop-zone" id="drop-zone">
                         <input type="file" id="image-picker" accept="image/*">
                         <div class="drop-zone-content">
                             <span class="upload-icon">📸</span>
-                            <p>Click or Drag Image</p>
+                            <p>Upload or Drag Image</p>
                         </div>
                         <button id="btn-clear-image" class="clear-btn" title="Clear Image">×</button>
                     </div>
                 </div>
 
                 <div class="input-group">
-                    <label for="encrypt-password">Access Code (Password)</label>
+                    <label for="encrypt-password">Encryption Password</label>
                     <div class="input-wrapper">
-                        <input type="password" id="encrypt-password" placeholder="Define security clearance...">
+                        <input type="password" id="encrypt-password" placeholder="Write password here...">
                         <button id="btn-clear-encrypt-password" class="clear-btn" title="Clear Password">×</button>
                     </div>
                 </div>
@@ -92,28 +92,28 @@
             <section class="pane receiver-pane" id="receiver-section">
                 <div class="pane-header">
                     <span class="icon">🔓</span>
-                    <h2>Agent Receiver</h2>
+                    <h2>Decrypt Image</h2>
                 </div>
 
                 <div class="input-group">
-                    <label for="emoji-input">Decryption Key (Paste Emojis)</label>
+                    <label for="emoji-input">Paste Emojis</label>
                     <div class="input-wrapper">
-                        <input type="text" id="emoji-input" placeholder="Paste intelligence emojis...">
+                        <input type="text" id="emoji-input" placeholder="Paste emojis here...">
                         <button id="btn-clear-emoji-input" class="clear-btn" title="Clear Emojis">×</button>
                     </div>
                 </div>
 
                 <div class="input-group">
-                    <label for="decrypt-password">Access Code (Password)</label>
+                    <label for="decrypt-password">Password</label>
                     <div class="input-wrapper">
-                        <input type="password" id="decrypt-password" placeholder="Enter security clearance...">
+                        <input type="password" id="decrypt-password" placeholder="Write password here...">
                         <button id="btn-clear-decrypt-password" class="clear-btn" title="Clear Password">×</button>
                     </div>
                 </div>
 
                 <div class="action-area">
                     <button id="btn-decrypt" class="secondary-btn">
-                        <span class="btn-text">DECRYPT INTELLIGENCE</span>
+                        <span class="btn-text">DECRYPT EMOJIS</span>
                     </button>
                 </div>
 

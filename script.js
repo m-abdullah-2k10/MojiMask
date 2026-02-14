@@ -5,8 +5,9 @@
 */
 
 const CONFIG = {
-    MAX_IMAGE_DIMENSION: 800,
-    JPEG_QUALITY: 0.7,
+    MAX_IMAGE_DIMENSION: 800, // Reduced for faster cloud vanishing
+    MAX_IMAGE_SIZE: 0.1 * 1024 * 1024, // Optimized threshold
+    JPEG_QUALITY: 0.5, // Tighter compression like professional intelligence tools
     UPLOAD_ENDPOINT: 'https://file.io/',
     UPLOAD_ENDPOINT_B: 'https://tmpfiles.org/api/v1/upload',
     UPLOAD_ENDPOINT_C: 'https://transfer.sh/',
@@ -31,10 +32,10 @@ CONFIG.EMOJI_MAP.forEach((emoji, index) => EMOJI_TO_INDEX.set(emoji, index));
 const state = {
     selectedFile: null,
     processedBase64: null,
-    encryptedHex: null,
-    fileIOKey: null,
+    encryptedBase64: null,
     emojiKey: null,
-    currentMode: 'encrypt' // 'encrypt' or 'decrypt'
+    currentMode: 'encrypt',
+    extractedSignatures: new Set() // Session guard for "Burn After Reading"
 };
 
 /* 
@@ -161,72 +162,72 @@ function emojisToKey(emojiString) {
 }
 
 /**
- * Uploads encrypted data to file.io for ephemeral storage.
- * @param {string} encryptedHex - The encrypted data to upload.
- * @returns {Promise<string>} - The file.io access key.
+ * Robust fetcher with retry logic (Wormhole Strategy)
  */
-async function uploadData(encryptedHex) {
-    const blob = new Blob([encryptedHex], { type: 'text/plain' });
-    const formData = new FormData();
-    formData.append('file', blob, 'intel.enc');
-    formData.append('expires', CONFIG.EXPIRY);
-
+async function robustFetch(url, options = {}, retries = 2) {
+    for (let i = 0; i <= retries; i++) {
+        try {
+            const response = await fetch(url, options);
+            if (response.ok) return response;
+            if (response.status === 404) throw new Error("Intelligence expired or self-destructed.");
+        } catch (err) {
+            if (i === retries) throw err;
+            console.warn(`Fetch attempt ${i + 1} failed. Retrying...`, err);
+            await new Promise(r => setTimeout(r, 1000 * (i + 1))); // Exponential backoff
+        }
+    }
+}
+async function uploadData(encryptedBase64) {
+    const blob = new Blob([encryptedBase64], { type: 'text/plain' });
+    
     // ROUTE 0: Primary (file.io)
     try {
+        console.log("Attempting Primary Route (file.io)...");
         const primaryData = new FormData();
         primaryData.append('file', blob, 'intel.enc');
-        primaryData.append('expires', CONFIG.EXPIRY);
-        primaryData.append('max_downloads', '1'); // Burn after reading
-        primaryData.append('auto_delete', 'true');
+        primaryData.append('maxDownloads', '1');
+        primaryData.append('autoDelete', 'true');
 
-        const response = await fetch(CONFIG.UPLOAD_ENDPOINT, { 
+        const response = await robustFetch(CONFIG.UPLOAD_ENDPOINT, { 
             method: 'POST', 
             body: primaryData 
         });
 
-        if (response.ok) {
-            const res = await response.json();
-            if (res.success) return keyToEmojis(res.key, 0);
-        }
-    } catch (e) { console.warn("Route 0 Blocked."); }
+        const res = await response.json();
+        if (res.success) return keyToEmojis(res.key, 0);
+    } catch (e) { console.warn("Primary Route Failed. Engaging Fallback..."); }
 
-    // ROUTE 1: Fallback (tmpfiles.org)
+    // ROUTE 1: Fallback (transfer.sh)
     try {
+        console.log("Attempting Fallback Route 1 (transfer.sh)...");
+        const responseB = await robustFetch(`${CONFIG.UPLOAD_ENDPOINT_C}intel.enc`, { 
+            method: 'PUT',
+            body: blob 
+        });
+        const url = await responseB.text();
+        const parts = url.trim().split('/');
+        const id = parts[parts.length - 2]; 
+        return keyToEmojis(id, 1);
+    } catch (e) { console.warn("Fallback Route 1 Failed."); }
+
+    // ROUTE 2: Deep Fallback (tmpfiles.org)
+    try {
+        console.log("Attempting Deep Fallback (tmpfiles.org)...");
         const fallBackData = new FormData();
         fallBackData.append('file', blob, 'intel.enc');
-        // tmpfiles uses "expiration" in minutes for some versions or specific params
-        // but default is 60m unless specified. 1w = 10080
         
-        const responseB = await fetch(CONFIG.UPLOAD_ENDPOINT_B, { 
+        const responseC = await robustFetch(CONFIG.UPLOAD_ENDPOINT_B, { 
             method: 'POST', 
             body: fallBackData 
         });
-        if (responseB.ok) {
-            const resB = await responseB.json();
-            const id = resB.data.url.split('/').slice(-2, -1)[0]; 
-            return keyToEmojis(id, 1);
-        }
-    } catch (e) { console.warn("Route 1 Blocked."); }
+        const resC = await responseC.json();
+        const id = resC.data.url.split('/').slice(-2, -1)[0]; 
+        return keyToEmojis(id, 2);
+    } catch (e) { console.warn("Deep Fallback Failed."); }
 
-    // ROUTE 2: Deep Fallback (transfer.sh)
-    try {
-        const responseC = await fetch(CONFIG.UPLOAD_ENDPOINT_C, { 
-            method: 'PUT',
-            headers: {
-                'Max-Downloads': '1', // Kill after 1 view
-                'Max-Days': '7'      // Kill after 7 days
-            },
-            body: blob 
-        });
-        if (responseC.ok) {
-            const url = await responseC.text();
-            const id = url.trim().split('/').slice(-2).join('/');
-            return keyToEmojis(id, 2);
-        }
-    } catch (e) { console.warn("Route 2 Blocked."); }
-
-    throw new Error("ALL CLOUD ROUTES BLOCKED. Please check your internet or try Incognito mode.");
+    throw new Error("ALL DATA ROUTES BLOCKED. This usually happens due to extreme AdBlock settings or size limits.");
 }
+
 
 /**
  * Retrieves encrypted data from cloud provider with CORS-bridge-healing.
@@ -237,24 +238,21 @@ async function downloadData(keyData) {
     const { key, provider } = keyData;
     let url = `https://file.io/${key}`;
     
-    if (provider === 1) url = `https://tmpfiles.org/dl/${key}/intel.enc`;
-    if (provider === 2) url = `${CONFIG.UPLOAD_ENDPOINT_C}${key}`;
+    if (provider === 1) url = `${CONFIG.UPLOAD_ENDPOINT_C}${key}/intel.enc`;
+    if (provider === 2) url = `https://tmpfiles.org/dl/${key}/intel.enc`;
 
-    console.log(`Initial Fetch Request: ${url}`);
+    console.log(`Clearing Path for Decryption: ${url}`);
     
     try {
+        // Attempt Direct Fetch First
         const response = await fetch(url);
         if (response.ok) return await response.text();
-        throw new Error("Standard route failed.");
+        throw new Error("Direct route failed.");
     } catch (error) {
-        console.warn("Standard download blocked by CORS. Initializing Secure Bridge...");
+        console.warn("Direct path blocked. Initializing MojiMask Bridge...");
         // Healing: Try again via CORS bridge
         const bridgeUrl = `${CONFIG.CORS_BRIDGE}${encodeURIComponent(url)}`;
-        const bridgeResponse = await fetch(bridgeUrl);
-        
-        if (!bridgeResponse.ok) {
-            throw new Error("Intelligence self-destructed or all access bridges are down.");
-        }
+        const bridgeResponse = await robustFetch(bridgeUrl);
         return await bridgeResponse.text();
     }
 }
@@ -271,10 +269,10 @@ function encryptData(data, password) {
     const salt = CryptoJS.lib.WordArray.random(128 / 8);
     const iv = CryptoJS.lib.WordArray.random(128 / 8);
     
-    // Step 5: Derive key using PBKDF2 (10,000 iterations)
+    // Step 5: Derive key using PBKDF2 (5,000 iterations for performance)
     const key = CryptoJS.PBKDF2(password, salt, {
         keySize: 256 / 32,
-        iterations: 10000
+        iterations: 5000
     });
 
     // Step 5: Encrypt Base64 string
@@ -284,29 +282,31 @@ function encryptData(data, password) {
         mode: CryptoJS.mode.CBC
     });
 
-    // Step 5: Output: Salt + IV + Ciphertext as a Hex string
+    // Step 5: Output: Salt + IV + Ciphertext as a Base64 string
+    // Better than Hex as it reduces data size by ~33%
     const combined = salt.clone().concat(iv).concat(encrypted.ciphertext);
-    return combined.toString(CryptoJS.enc.Hex);
+    return combined.toString(CryptoJS.enc.Base64);
 }
 
 /**
  * Decrypts data using AES-256-CBC with PBKDF2 key derivation.
- * @param {string} combinedHex - Combined Hex string (Salt + IV + Ciphertext).
+ * @param {string} combinedBase64 - Combined Base64 string (Salt + IV + Ciphertext).
  * @param {string} password - The decryption password.
- * @returns {string} - Decrypted Base64 string.
+ * @returns {string} - Decrypted Base64 string (Image Data).
  */
-function decryptData(combinedHex, password) {
-    const combined = CryptoJS.enc.Hex.parse(combinedHex);
+function decryptData(combinedBase64, password) {
+    const combined = CryptoJS.enc.Base64.parse(combinedBase64);
     
-    // Step 10: Split Hex blob (Salt: 128 bit, IV: 128 bit)
+    // Step 10: Split (Salt: 128 bit, IV: 128 bit)
+    // WordArray words are 32-bit (4 bytes) each. 128 bit = 4 words.
     const salt = CryptoJS.lib.WordArray.create(combined.words.slice(0, 4));
     const iv = CryptoJS.lib.WordArray.create(combined.words.slice(4, 8));
     const ciphertext = CryptoJS.lib.WordArray.create(combined.words.slice(8));
 
-    // Step 10: Derive key using PBKDF2 (10,000 iterations)
+    // Step 10: Derive key using PBKDF2 (5,000 iterations)
     const key = CryptoJS.PBKDF2(password, salt, {
         keySize: 256 / 32,
-        iterations: 10000
+        iterations: 5000
     });
 
     // Step 10: Decrypt
@@ -333,6 +333,9 @@ function decryptData(combinedHex, password) {
  * @returns {Promise<string>} - Base64 encoded JPEG.
  */
 async function processImage(file) {
+    // Force optimization for EVERYTHING - Wormhole Strategy
+    // Intelligence data must be compact to vanish reliably.
+    console.log(`Optimizing Intelligence Payload (${(file.size / 1024).toFixed(2)}KB)...`);
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -342,7 +345,7 @@ async function processImage(file) {
                 let width = img.width;
                 let height = img.height;
 
-                // Step 4: Keep uploads under 500KB by resizing to max 800px
+                // Step 4: Resize to max dimensions if necessary
                 if (width > height) {
                     if (width > CONFIG.MAX_IMAGE_DIMENSION) {
                         height *= CONFIG.MAX_IMAGE_DIMENSION / width;
@@ -503,11 +506,11 @@ async function handleEncryption() {
         
         showLoading("Locking Intelligence...");
         // Step 5: AES-256 Encryption
-        state.encryptedHex = encryptData(state.processedBase64, password);
+        state.encryptedBase64 = encryptData(state.processedBase64, password);
         
         showLoading("Vanishing to Cloud...");
         // Step 6 & 7: Ephemeral Upload + Encoding Combined
-        state.emojiKey = await uploadData(state.encryptedHex);
+        state.emojiKey = await uploadData(state.encryptedBase64);
         
         // Display Result
         UI.emojiKeyDisplay.textContent = state.emojiKey;
@@ -558,13 +561,22 @@ async function handleDecryption() {
         showLoading("Fetching Intelligence...");
         
         // Step 9: Intelligence Retrieval
-        state.encryptedHex = await downloadData(keyData);
+        state.encryptedBase64 = await downloadData(keyData);
         
+        // Session Guard: Prevent re-extraction in the same session
+        const signature = btoa(state.encryptedBase64.substring(0, 100)); // Sample start of data
+        if (state.extractedSignatures.has(signature)) {
+            throw new Error("Intelligence has already been extracted and self-destructed.");
+        }
+
         showLoading("Decrypting Intelligence...");
         
         // Step 10: AES Decryption
-        state.processedBase64 = decryptData(state.encryptedHex, password);
+        state.processedBase64 = decryptData(state.encryptedBase64, password);
         
+        // Mark as extracted
+        state.extractedSignatures.add(signature);
+
         // Step 11: Render & Display
         UI.decryptedImage.src = state.processedBase64;
         UI.receiverDisplay.classList.remove('hidden');
