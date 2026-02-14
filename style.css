@@ -299,7 +299,7 @@ input[type="password"] {
   width: 100%;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-color);
-  padding: 1rem 3rem 1rem 1.25rem; /* Increased right padding for clear button */
+  padding: 1rem 5rem 1rem 1.25rem; /* Increased right padding for clear and toggle buttons */
   border-radius: 12px;
   color: #fff;
   font-family: "Fira Code", monospace;
@@ -311,6 +311,38 @@ input[type="password"] {
   position: relative;
   display: flex;
   align-items: center;
+  width: 100%;
+}
+
+.toggle-pass-btn {
+  position: absolute;
+  right: 3rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  opacity: 0.6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  z-index: 5;
+}
+
+.toggle-pass-btn:hover {
+  opacity: 1;
+  color: var(--accent-color);
+  text-shadow: 0 0 8px var(--accent-glow);
+}
+
+.toggle-pass-btn.active {
+    color: var(--primary-color);
+    text-shadow: 0 0 8px var(--primary-glow);
 }
 
 .clear-btn {
@@ -622,6 +654,214 @@ input[type="password"] {
 .hidden {
   display: none !important;
 }
+
+/* Privacy Guide Section */
+.privacy-guide {
+    margin-top: 5rem;
+    padding: 3rem;
+    background: rgba(15, 15, 15, 0.4);
+    border: 1px solid var(--border-color);
+    border-radius: 32px;
+    backdrop-filter: blur(25px);
+    box-shadow: 0 40px 80px rgba(0, 0, 0, 0.6);
+    position: relative;
+    overflow: hidden;
+}
+
+.privacy-guide::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background: linear-gradient(90deg, transparent, var(--accent-color), transparent);
+}
+
+.guide-header {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    margin-bottom: 3.5rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.guide-icon {
+    font-size: 2.5rem;
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.2));
+}
+
+.privacy-guide:hover .guide-icon {
+    transform: rotate(15deg) scale(1.2);
+}
+
+.guide-header h2 {
+    font-size: 2rem;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+.guide-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 4rem;
+}
+
+.guide-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 2.5rem;
+    border-radius: 24px;
+    transition: all 0.4s ease;
+}
+
+.guide-card:hover {
+    background: rgba(255, 255, 255, 0.05);
+    transform: translateY(-5px);
+    border-color: var(--accent-color);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.card-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1.5rem;
+    display: block;
+}
+
+.guide-card h3 {
+    font-size: 1.25rem;
+    margin-bottom: 1.25rem;
+    color: var(--accent-color);
+    font-weight: 600;
+}
+
+.guide-card p {
+    font-size: 0.95rem;
+    line-height: 1.7;
+    color: var(--text-dim);
+}
+
+.technical-details {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 2.5rem;
+    border-radius: 20px;
+    margin-bottom: 4rem;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.technical-details h3 {
+    font-family: 'Fira Code', monospace;
+    font-size: 1.1rem;
+    margin-bottom: 2rem;
+    color: var(--primary-color);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.detail-item {
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    margin-bottom: 1.25rem;
+    padding-left: 1.5rem;
+    position: relative;
+    line-height: 1.6;
+}
+
+.detail-item::before {
+    content: '>';
+    position: absolute;
+    left: 0;
+    color: var(--primary-color);
+    font-family: 'Fira Code', monospace;
+}
+
+.process-steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2.5rem;
+    padding-top: 4rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.step {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.step-num {
+    font-family: 'Fira Code', monospace;
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.05);
+    line-height: 0.8;
+    user-select: none;
+}
+
+.step-content h4 {
+    margin-bottom: 0.75rem;
+    color: #fff;
+    font-size: 1.1rem;
+    letter-spacing: 0.5px;
+}
+
+.step-content p {
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+    .guide-grid {
+        grid-template-columns: 1fr;
+    }
+    .process-steps {
+        grid-template-columns: 1fr;
+        gap: 3rem;
+    }
+    .privacy-guide {
+        padding: 2.5rem 1.5rem;
+        border-radius: 24px;
+    }
+    .guide-header h2 {
+        font-size: 1.5rem;
+    }
+    .guide-card {
+        padding: 2rem;
+    }
+}
+
+@media (max-width: 600px) {
+    .app-container {
+        padding: 1rem;
+    }
+    .glitch-text {
+        font-size: 2rem;
+    }
+    .nav-btn {
+        min-width: 100px;
+        padding: 0.75rem 1rem;
+    }
+    .notification-container {
+        bottom: 1rem;
+        right: 1rem;
+        left: 1rem;
+    }
+    .toast {
+        min-width: auto;
+    }
+    .guide-header {
+        flex-direction: column;
+        text-align: center;
+        gap: 1rem;
+    }
+}
+
 
 /* Footer */
 .app-footer {

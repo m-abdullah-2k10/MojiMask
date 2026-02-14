@@ -64,6 +64,7 @@
                     <label for="encrypt-password">Encryption Password</label>
                     <div class="input-wrapper">
                         <input type="password" id="encrypt-password" placeholder="Write password here...">
+                        <button id="btn-toggle-encrypt-password" class="toggle-pass-btn" title="Toggle Password">👁️</button>
                         <button id="btn-clear-encrypt-password" class="clear-btn" title="Clear Password">×</button>
                     </div>
                 </div>
@@ -76,7 +77,7 @@
                 </div>
 
                 <div class="output-area hidden" id="sender-output">
-                    <label>Intelligence Key (Share these emojis)</label>
+                    <label>Encrypted Key (Share these emojis)</label>
                     <div class="emoji-result-container">
                         <div id="emoji-key-display" class="emoji-key"></div>
                         <div class="button-group">
@@ -107,6 +108,7 @@
                     <label for="decrypt-password">Password</label>
                     <div class="input-wrapper">
                         <input type="password" id="decrypt-password" placeholder="Write password here...">
+                        <button id="btn-toggle-decrypt-password" class="toggle-pass-btn" title="Toggle Password">👁️</button>
                         <button id="btn-clear-decrypt-password" class="clear-btn" title="Clear Password">×</button>
                     </div>
                 </div>
@@ -129,6 +131,75 @@
                 </div>
             </section>
         </div>
+        
+        <!-- How It Works & Privacy Section -->
+        <section class="privacy-guide" id="privacy-section">
+            <div class="guide-header">
+                <span class="guide-icon">📚</span>
+                <h2>Detailed Security Intelligence</h2>
+            </div>
+            
+            <div class="guide-grid">
+                <div class="guide-card">
+                    <div class="card-icon">🔐</div>
+                    <h3>AES-256 Encryption</h3>
+                    <p>Your data is secured using <strong>AES-256-CBC</strong>. Before any data leaves your browser, it is transformed into a cryptographically locked blob. We use <strong>PBKDF2</strong> with 5,000 iterations to derive a secure key from your password, ensuring even brute-force attempts are computationally exhaustive.</p>
+                </div>
+                <div class="guide-card">
+                    <div class="card-icon">🌑</div>
+                    <h3>Zero-Knowledge Architecture</h3>
+                    <p>MojiMask operates on a <strong>Zero-Knowledge</strong> principle. Neither our servers nor the cloud providers ever see your raw image or your password. The "Phantom Key" (emojis) is a localized encoding of a temporary resource ID, meaning the link between your data and the server is obfuscated.</p>
+                </div>
+                <div class="guide-card">
+                    <div class="card-icon">💥</div>
+                    <h3>Vanish Protocol</h3>
+                    <p>We enforce a strict <strong>Vanish Protocol</strong>. Your encrypted data is stored on ephemeral cloud storage designed to "Burn After Reading." Once a recipient decrypts the intelligence, it is wiped from the server. If not accessed, it self-destructs automatically after 7 days.</p>
+                </div>
+                <div class="guide-card">
+                    <div class="card-icon">🛡️</div>
+                    <h3>Browser-Side Privacy</h3>
+                    <p>All processing is handled by your local CPU. We do not use tracking cookies, analytics scripts, or any form of data logging. Your privacy is not just a policy; it's hard-coded into the architecture of the tool.</p>
+                </div>
+            </div>
+
+            <div class="technical-details">
+                <h3>Technical Breakdown</h3>
+                <div class="detail-item">
+                    <strong>1. Local Optimization:</strong> Images are shrunk and compressed using smart JPEG algorithms to ensure quick transmission and immediate destruction.
+                </div>
+                <div class="detail-item">
+                    <strong>2. Phantom Key Mapping:</strong> The emojis you share are a custom character-map of the encrypted resource ID. This prevents simple text-based filtering by surveillance systems.
+                </div>
+                <div class="detail-item">
+                    <strong>3. Session Guard:</strong> Each session tracks extracted signatures to prevent reloading or double-accessing the same intelligence, enforcing the "One View" rule.
+                </div>
+            </div>
+
+            <div class="process-steps">
+                <div class="step">
+                    <span class="step-num">01</span>
+                    <div class="step-content">
+                        <h4>Secure Capture</h4>
+                        <p>Upload your intelligence. Your browser immediately optimizes and encrypts it locally.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <span class="step-num">02</span>
+                    <div class="step-content">
+                        <h4>Masked Sharing</h4>
+                        <p>Copy the Phantom Key emojis. Share them via any communication channel securely.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <span class="step-num">03</span>
+                    <div class="step-content">
+                        <h4>Destructive Access</h4>
+                        <p>The recipient unlocks the data. The server deletes the file forever upon retrieval.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
 
         <footer class="app-footer">
             <p class="crypto-status">System Status: <span class="status-online">ENCRYPTION_ACTIVE</span></p>

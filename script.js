@@ -79,13 +79,15 @@ function initUI() {
         loadingText: document.getElementById('loading-text'),
         notificationContainer: document.getElementById('notification-container'),
 
-        // Clear Buttons
+        // Clear & Toggle Buttons
         btnClearEncryptPass: document.getElementById('btn-clear-encrypt-password'),
         btnClearEmojiInput: document.getElementById('btn-clear-emoji-input'),
         btnClearDecryptPass: document.getElementById('btn-clear-decrypt-password'),
         btnClearEmojis: document.getElementById('btn-clear-emojis'),
         btnClearRestored: document.getElementById('btn-clear-restored'),
-        btnClearImage: document.getElementById('btn-clear-image')
+        btnClearImage: document.getElementById('btn-clear-image'),
+        btnToggleEncryptPass: document.getElementById('btn-toggle-encrypt-password'),
+        btnToggleDecryptPass: document.getElementById('btn-toggle-decrypt-password')
     };
 
     // Verify critical elements
@@ -453,6 +455,22 @@ function toggleClearButton(input, btn) {
     }
 }
 
+/**
+ * Toggles the visibility of a password input.
+ * @param {HTMLInputElement} input 
+ * @param {HTMLElement} btn 
+ */
+function togglePasswordVisibility(input, btn) {
+    if (!input || !btn) return;
+    const isPassword = input.type === 'password';
+    input.type = isPassword ? 'text' : 'password';
+    btn.textContent = isPassword ? '🙈' : '👁️';
+    btn.classList.toggle('active', isPassword);
+    
+    // Maintain focus
+    input.focus();
+}
+
 /* 
    ==========================================================================
    CORE LOGIC & EVENT HANDLERS
@@ -517,7 +535,7 @@ async function handleEncryption() {
         UI.senderOutput.classList.remove('hidden');
         
         hideLoading();
-        notify("Intelligence encrypted and vanished to cloud.", "success");
+        notify("Encryption completed.", "success");
         console.log("Intelligence Phase Complete. Phantom Key:", state.emojiKey);
 
     } catch (error) {
@@ -682,6 +700,15 @@ document.addEventListener('DOMContentLoaded', () => {
         UI.decryptPassword.value = '';
         toggleClearButton(UI.decryptPassword, UI.btnClearDecryptPass);
         UI.decryptPassword.focus();
+    });
+
+    // 5.2 Toggle Password Buttons
+    UI.btnToggleEncryptPass.addEventListener('click', () => {
+        togglePasswordVisibility(UI.encryptPassword, UI.btnToggleEncryptPass);
+    });
+
+    UI.btnToggleDecryptPass.addEventListener('click', () => {
+        togglePasswordVisibility(UI.decryptPassword, UI.btnToggleDecryptPass);
     });
 
     UI.btnClearEmojis.addEventListener('click', () => {
