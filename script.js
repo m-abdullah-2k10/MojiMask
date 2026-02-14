@@ -76,7 +76,15 @@ function initUI() {
         // Global
         loadingOverlay: document.getElementById('loading-overlay'),
         loadingText: document.getElementById('loading-text'),
-        notificationContainer: document.getElementById('notification-container')
+        notificationContainer: document.getElementById('notification-container'),
+
+        // Clear Buttons
+        btnClearEncryptPass: document.getElementById('btn-clear-encrypt-password'),
+        btnClearEmojiInput: document.getElementById('btn-clear-emoji-input'),
+        btnClearDecryptPass: document.getElementById('btn-clear-decrypt-password'),
+        btnClearEmojis: document.getElementById('btn-clear-emojis'),
+        btnClearRestored: document.getElementById('btn-clear-restored'),
+        btnClearImage: document.getElementById('btn-clear-image')
     };
 
     // Verify critical elements
@@ -165,7 +173,17 @@ async function uploadData(encryptedHex) {
 
     // ROUTE 0: Primary (file.io)
     try {
-        const response = await fetch(CONFIG.UPLOAD_ENDPOINT, { method: 'POST', body: formData });
+        const primaryData = new FormData();
+        primaryData.append('file', blob, 'intel.enc');
+        primaryData.append('expires', CONFIG.EXPIRY);
+        primaryData.append('max_downloads', '1'); // Burn after reading
+        primaryData.append('auto_delete', 'true');
+
+        const response = await fetch(CONFIG.UPLOAD_ENDPOINT, { 
+            method: 'POST', 
+            body: primaryData 
+        });
+
         if (response.ok) {
             const res = await response.json();
             if (res.success) return keyToEmojis(res.key, 0);
@@ -174,7 +192,15 @@ async function uploadData(encryptedHex) {
 
     // ROUTE 1: Fallback (tmpfiles.org)
     try {
-        const responseB = await fetch(CONFIG.UPLOAD_ENDPOINT_B, { method: 'POST', body: formData });
+        const fallBackData = new FormData();
+        fallBackData.append('file', blob, 'intel.enc');
+        // tmpfiles uses "expiration" in minutes for some versions or specific params
+        // but default is 60m unless specified. 1w = 10080
+        
+        const responseB = await fetch(CONFIG.UPLOAD_ENDPOINT_B, { 
+            method: 'POST', 
+            body: fallBackData 
+        });
         if (responseB.ok) {
             const resB = await responseB.json();
             const id = resB.data.url.split('/').slice(-2, -1)[0]; 
@@ -185,12 +211,16 @@ async function uploadData(encryptedHex) {
     // ROUTE 2: Deep Fallback (transfer.sh)
     try {
         const responseC = await fetch(CONFIG.UPLOAD_ENDPOINT_C, { 
-            method: 'PUT', // transfer.sh uses PUT
+            method: 'PUT',
+            headers: {
+                'Max-Downloads': '1', // Kill after 1 view
+                'Max-Days': '7'      // Kill after 7 days
+            },
             body: blob 
         });
         if (responseC.ok) {
             const url = await responseC.text();
-            const id = url.trim().split('/').slice(-2).join('/'); // e.g. "ID/intel.enc"
+            const id = url.trim().split('/').slice(-2).join('/');
             return keyToEmojis(id, 2);
         }
     } catch (e) { console.warn("Route 2 Blocked."); }
@@ -394,12 +424,31 @@ function shake(element) {
     }, 400);
 }
 
-// Clear invalid state on input
+// Clear invalid state and toggle clear buttons on input
 document.addEventListener('input', (e) => {
     if (e.target.tagName === 'INPUT') {
         e.target.classList.remove('invalid');
+        
+        // Handle clear button visibility
+        if (e.target === UI.encryptPassword) toggleClearButton(UI.encryptPassword, UI.btnClearEncryptPass);
+        if (e.target === UI.emojiInput) toggleClearButton(UI.emojiInput, UI.btnClearEmojiInput);
+        if (e.target === UI.decryptPassword) toggleClearButton(UI.decryptPassword, UI.btnClearDecryptPass);
     }
 });
+
+/**
+ * Toggles the visibility of a clear button based on input value.
+ * @param {HTMLInputElement} input 
+ * @param {HTMLElement} btn 
+ */
+function toggleClearButton(input, btn) {
+    if (!input || !btn) return;
+    if (input.value.length > 0) {
+        btn.classList.add('visible');
+    } else {
+        btn.classList.remove('visible');
+    }
+}
 
 /* 
    ==========================================================================
@@ -556,7 +605,18 @@ function handleFileSelect(e) {
         const dropZoneText = UI.dropZone.querySelector('p');
         dropZoneText.textContent = `Captured: ${file.name}`;
         UI.dropZone.style.borderColor = 'var(--primary-color)';
+        UI.btnClearImage.classList.add('visible');
     }
+}
+
+function clearImageSelection() {
+    state.selectedFile = null;
+    UI.imagePicker.value = '';
+    const dropZoneText = UI.dropZone.querySelector('p');
+    dropZoneText.textContent = 'Click or Drag Image';
+    UI.dropZone.style.borderColor = 'var(--border-color)';
+    UI.btnClearImage.classList.remove('visible');
+    notify("Intelligence data removed.", "info");
 }
 
 /* 
@@ -592,6 +652,44 @@ document.addEventListener('DOMContentLoaded', () => {
     UI.btnInitiate.addEventListener('click', handleEncryption);
     UI.btnDecrypt.addEventListener('click', handleDecryption);
     UI.btnDownload.addEventListener('click', downloadIntelligence);
+
+    // 5.1 Clear Buttons
+    UI.btnClearEncryptPass.addEventListener('click', () => {
+        UI.encryptPassword.value = '';
+        toggleClearButton(UI.encryptPassword, UI.btnClearEncryptPass);
+        UI.encryptPassword.focus();
+    });
+
+    UI.btnClearEmojiInput.addEventListener('click', () => {
+        UI.emojiInput.value = '';
+        toggleClearButton(UI.emojiInput, UI.btnClearEmojiInput);
+        UI.emojiInput.focus();
+    });
+
+    UI.btnClearDecryptPass.addEventListener('click', () => {
+        UI.decryptPassword.value = '';
+        toggleClearButton(UI.decryptPassword, UI.btnClearDecryptPass);
+        UI.decryptPassword.focus();
+    });
+
+    UI.btnClearEmojis.addEventListener('click', () => {
+        state.emojiKey = null;
+        UI.emojiKeyDisplay.textContent = '';
+        UI.senderOutput.classList.add('hidden');
+        notify("Encryption result cleared.", "info");
+    });
+
+    UI.btnClearImage.addEventListener('click', (e) => {
+        e.stopPropagation(); // Avoid triggering file picker
+        clearImageSelection();
+    });
+
+    UI.btnClearRestored.addEventListener('click', () => {
+        state.processedBase64 = null;
+        UI.decryptedImage.src = '';
+        UI.receiverDisplay.classList.add('hidden');
+        notify("Decryption result cleared.", "info");
+    });
 
     // 6. Copy to Clipboard
     UI.btnCopyEmojis.addEventListener('click', () => {

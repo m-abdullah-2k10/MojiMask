@@ -56,12 +56,16 @@
                             <span class="upload-icon">📸</span>
                             <p>Click or Drag Image</p>
                         </div>
+                        <button id="btn-clear-image" class="clear-btn" title="Clear Image">×</button>
                     </div>
                 </div>
 
                 <div class="input-group">
                     <label for="encrypt-password">Access Code (Password)</label>
-                    <input type="password" id="encrypt-password" placeholder="Define security clearance...">
+                    <div class="input-wrapper">
+                        <input type="password" id="encrypt-password" placeholder="Define security clearance...">
+                        <button id="btn-clear-encrypt-password" class="clear-btn" title="Clear Password">×</button>
+                    </div>
                 </div>
 
                 <div class="action-area">
@@ -75,7 +79,10 @@
                     <label>Intelligence Key (Share these emojis)</label>
                     <div class="emoji-result-container">
                         <div id="emoji-key-display" class="emoji-key"></div>
-                        <button id="btn-copy-emojis" class="icon-btn" title="Copy Key">📋</button>
+                        <div class="button-group">
+                            <button id="btn-copy-emojis" class="icon-btn" title="Copy Key">📋</button>
+                            <button id="btn-clear-emojis" class="icon-btn" title="Clear All">🗑️</button>
+                        </div>
                     </div>
                     <p class="status-msg">⚠️ Self-destructs after 1 view or 7 days.</p>
                 </div>
@@ -90,12 +97,18 @@
 
                 <div class="input-group">
                     <label for="emoji-input">Decryption Key (Paste Emojis)</label>
-                    <input type="text" id="emoji-input" placeholder="Paste intelligence emojis...">
+                    <div class="input-wrapper">
+                        <input type="text" id="emoji-input" placeholder="Paste intelligence emojis...">
+                        <button id="btn-clear-emoji-input" class="clear-btn" title="Clear Emojis">×</button>
+                    </div>
                 </div>
 
                 <div class="input-group">
                     <label for="decrypt-password">Access Code (Password)</label>
-                    <input type="password" id="decrypt-password" placeholder="Enter security clearance...">
+                    <div class="input-wrapper">
+                        <input type="password" id="decrypt-password" placeholder="Enter security clearance...">
+                        <button id="btn-clear-decrypt-password" class="clear-btn" title="Clear Password">×</button>
+                    </div>
                 </div>
 
                 <div class="action-area">
@@ -109,7 +122,10 @@
                     <div class="image-preview-container">
                         <img id="decrypted-image" src="" alt="Intelligence Data">
                     </div>
-                    <button id="btn-download" class="save-btn">Save Intelligence</button>
+                    <div class="button-group horizontal">
+                        <button id="btn-download" class="save-btn">Save Intelligence</button>
+                        <button id="btn-clear-restored" class="save-btn delete-btn">Clear Result</button>
+                    </div>
                 </div>
             </section>
         </div>
