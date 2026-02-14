@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="style.css">
     
     <!-- CryptoJS -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js" integrity="sha512-E8QSvWZ0eCLGk4km6VRDx6Rn9NIHr92H1PZtp2baAR6M9SXL3O6wK07d2f9Vof604HgzZiGMo279f8jgGlqMEw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 </head>
 <body>
     <div class="background-scanlines"></div>
@@ -109,7 +109,7 @@
                     <div class="image-preview-container">
                         <img id="decrypted-image" src="" alt="Intelligence Data">
                     </div>
-                    <button id="btn-download" class="text-link">Save Intelligence</button>
+                    <button id="btn-download" class="save-btn">Save Intelligence</button>
                 </div>
             </section>
         </div>
@@ -127,6 +127,9 @@
             <p id="loading-text">Encrypting Intelligence...</p>
         </div>
     </div>
+
+    <!-- Notification system for Step 12 UX -->
+    <div id="notification-container" class="notification-container"></div>
 
     <script src="script.js"></script>
 </body>

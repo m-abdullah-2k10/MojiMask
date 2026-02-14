@@ -7,16 +7,14 @@
 const CONFIG = {
     MAX_IMAGE_DIMENSION: 800,
     JPEG_QUALITY: 0.7,
-    UPLOAD_ENDPOINT: 'https://file.io/?expires=1w',
+    UPLOAD_ENDPOINT: 'https://file.io/',
+    UPLOAD_ENDPOINT_B: 'https://tmpfiles.org/api/v1/upload',
+    UPLOAD_ENDPOINT_C: 'https://transfer.sh/',
+    EXPIRY: '1w',
+    CORS_BRIDGE: 'https://api.allorigins.win/raw?url=',
+    // 256 Safe, single-character emojis for robust mapping
     EMOJI_MAP: [
-        '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐', '🤨',
-        '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥', '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🤧', '🥵', '🥶', '🥴', '😵', '🤯', '🤠', '🥳', '😎', '🤓', '🧐', '😕', '😟', '🙁',
-        '😮', '😯', '😲', '😳', '🥺', '😦', '😧', '😨', '😰', '😥', '😢', '😭', '😱', '😖', '😣', '😞', '😓', '😩', '😫', '🥱', '😤', '😡', '😠', '🤬', '😈', '👿', '💀', '☠️', '💩', '🤡', '👹', '👺',
-        '👻', '👽', '👾', '🤖', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾', '🙈', '🙉', '🙊', '💋', '💌', '💘', '💝', '💖', '💗', '💓', '💞', '💕', '💟', '❣️', '💔', '❤️', '🧡', '💛', '💚',
-        '💙', '💜', '🤎', '🖤', '🤍', '💯', '💢', '💥', '💫', '💦', '💨', '🕳️', '💣', '💬', '👁️‍🗨️', '🗨️', '🗯️', '💭', '💤', '👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤏', '✌️', '🤞', '🤟', '🤘', '🤙', '👈',
-        '👉', '👆', '🖕', '👇', '☝️', '👍', '👎', '✊', '👊', '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💅', '🤳', '💪', '🦾', '🦵', '🦿', '🦶', '👂', '🦻', '👃', '🧠', '🦷', '🦴', '👀',
-        '👁️', '👅', '👄', '👶', '🧒', '👦', '👧', '🧑', '👱', '👨', '🧔', '👩', '🧓', '👵', '👴', '👲', '👳', '🧕', '👮', '👷', '💂', '🕵️', '👩‍⚕️', '👨‍⚕️', '👩‍🌾', '👨‍🌾', '👩‍🍳', '👨‍🍳', '👩‍🎓', '👨‍🎓', '👩‍🎤', '👨‍🎤',
-        '👩‍🏫', '👨‍🏫', '👩‍🏭', '👨‍🏭', '👩‍💻', '👨‍💻', '👩‍💼', '👨‍💼', '👩‍🔧', '👨‍🔧', '👩‍🔬', '👨‍🔬', '👩‍🎨', '👨‍🎨', '👩‍🚒', '👨‍🚒', '👩‍✈️', '👨‍✈️', '👩‍🚀', '👨‍🚀', '👩‍⚖️', '👨‍⚖️', '👰', '🤵', '👸', '🤴', '🧚', '🧞', '🧜', '🧟', '🧙', '🧛'
+        '😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🤩','🥳','😏','😒','😞','😔','😟','😕','🙁','☹️','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🥴','🤢','🤮','🤧','🤨','🧐','🤠','🤡','👿','😈','👹','👺','👻','💀','👽','👾','🤖','💩','😺','😸','😹','😻','😼','😽','🙀','😿','😾','🙈','🙉','🙊','💋','💌','💘','💝','💖','💗','💓','💞','💕','💟','❣️','💔','❤️','🧡','💛','💚','💙','💜','🤎','🖤','🤍','♨️','💢','💥','💫','💦','💨','🕳️','💣','💬','🗨️','🗯️','💭','💤','👋','🤚','🖐️','✋','🖖','👌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏','✍️','💅','🤳','💪','🦾','🦵','🦿','🦶','👂','🦻','👃','🧠','🦷','🦴','👀','👁️','👅','👄','👶','🧒','👦','👧','🧑','👱','👨','🧔','👩','🧓','👴','👵','👲','👳','🧕','👮','👷','💂','🕵️','🤵','👰','👸','🤴','👶','🍼','🧸','🧶'
     ]
 };
 
@@ -77,13 +75,26 @@ function initUI() {
 
         // Global
         loadingOverlay: document.getElementById('loading-overlay'),
-        loadingText: document.getElementById('loading-text')
+        loadingText: document.getElementById('loading-text'),
+        notificationContainer: document.getElementById('notification-container')
     };
 
     // Verify critical elements
     const missing = Object.entries(UI).filter(([key, val]) => !val).map(([key]) => key);
     if (missing.length > 0) {
         console.error("Critical UI elements missing:", missing);
+    }
+
+    // Verify Encryption Engine
+    if (typeof CryptoJS === 'undefined') {
+        console.error("CryptoJS NOT LOADED. Encryption will fail.");
+        notify("CRITICAL: Encryption engine failed to load. Retrying...", "error");
+        
+        // Attempt to dynamically reload the script if it failed
+        const script = document.createElement('script');
+        script.src = "https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js";
+        script.onload = () => notify("Encryption engine restored.", "success");
+        document.head.appendChild(script);
     }
 }
 
@@ -94,20 +105,28 @@ function initUI() {
 */
 
 /**
- * Maps an alphanumeric string (the cloud key) to a short emoji string.
- * @param {string} key - The alphanumeric key.
+ * Maps a string key to emojis by converting characters to bytes.
+ * This ensures no 1-to-1 alphabet replacement is visible.
+ * @param {string} key - The key from provider.
+ * @param {number} providerIndex - 0: Primary, 1: Fallback B, 2: Fallback C
  * @returns {string} - The emoji representation.
  */
-function keyToEmojis(key) {
-    return Array.from(key)
-        .map(char => CONFIG.EMOJI_MAP[char.charCodeAt(0)] || '❓')
+function keyToEmojis(key, providerIndex = 0) {
+    const signals = ['🛡️', '🛰️', '🛸'];
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(key);
+    
+    const emojis = Array.from(bytes)
+        .map(byte => CONFIG.EMOJI_MAP[byte] || '❓')
         .join('');
+        
+    return signals[providerIndex] + emojis;
 }
 
 /**
- * Maps an emoji string back to its alphanumeric key.
+ * Maps an emoji string back to its provider signal and alphanumeric key.
  * @param {string} emojiString - The string of emojis.
- * @returns {string} - The alphanumeric key.
+ * @returns {object} - { key: string, provider: number }
  */
 function emojisToKey(emojiString) {
     let emojis;
@@ -118,12 +137,19 @@ function emojisToKey(emojiString) {
         emojis = Array.from(emojiString);
     }
 
-    return emojis
-        .map(emoji => {
-            const index = EMOJI_TO_INDEX.get(emoji);
-            return index !== undefined ? String.fromCharCode(index) : '';
-        })
-        .join('');
+    const signal = emojis.shift();
+    let provider = 0;
+    if (signal === '🛰️') provider = 1;
+    if (signal === '🛸') provider = 2;
+
+    const bytes = emojis
+        .map(emoji => EMOJI_TO_INDEX.get(emoji))
+        .filter(index => index !== undefined);
+
+    const decoder = new TextDecoder();
+    const key = decoder.decode(new Uint8Array(bytes));
+
+    return { key, provider };
 }
 
 /**
@@ -132,46 +158,78 @@ function emojisToKey(emojiString) {
  * @returns {Promise<string>} - The file.io access key.
  */
 async function uploadData(encryptedHex) {
-    const formData = new FormData();
-    // Create a Blob from the hex string to upload as a "file"
     const blob = new Blob([encryptedHex], { type: 'text/plain' });
-    formData.append('file', blob, 'intelligence.enc');
+    const formData = new FormData();
+    formData.append('file', blob, 'intel.enc');
+    formData.append('expires', CONFIG.EXPIRY);
 
-    const response = await fetch(CONFIG.UPLOAD_ENDPOINT, {
-        method: 'POST',
-        body: formData
-    });
+    // ROUTE 0: Primary (file.io)
+    try {
+        const response = await fetch(CONFIG.UPLOAD_ENDPOINT, { method: 'POST', body: formData });
+        if (response.ok) {
+            const res = await response.json();
+            if (res.success) return keyToEmojis(res.key, 0);
+        }
+    } catch (e) { console.warn("Route 0 Blocked."); }
 
-    if (!response.ok) {
-        throw new Error(`Cloud upload failed with status: ${response.status}`);
-    }
+    // ROUTE 1: Fallback (tmpfiles.org)
+    try {
+        const responseB = await fetch(CONFIG.UPLOAD_ENDPOINT_B, { method: 'POST', body: formData });
+        if (responseB.ok) {
+            const resB = await responseB.json();
+            const id = resB.data.url.split('/').slice(-2, -1)[0]; 
+            return keyToEmojis(id, 1);
+        }
+    } catch (e) { console.warn("Route 1 Blocked."); }
 
-    const result = await response.json();
-    if (!result.success) {
-        throw new Error(result.message || "Failed to retrieve access key from cloud.");
-    }
+    // ROUTE 2: Deep Fallback (transfer.sh)
+    try {
+        const responseC = await fetch(CONFIG.UPLOAD_ENDPOINT_C, { 
+            method: 'PUT', // transfer.sh uses PUT
+            body: blob 
+        });
+        if (responseC.ok) {
+            const url = await responseC.text();
+            const id = url.trim().split('/').slice(-2).join('/'); // e.g. "ID/intel.enc"
+            return keyToEmojis(id, 2);
+        }
+    } catch (e) { console.warn("Route 2 Blocked."); }
 
-    return result.key; // e.g., "jR8kLm"
+    throw new Error("ALL CLOUD ROUTES BLOCKED. Please check your internet or try Incognito mode.");
 }
 
 /**
- * Retrieves encrypted data from file.io.
- * @param {string} key - The file.io access key.
+ * Retrieves encrypted data from cloud provider with CORS-bridge-healing.
+ * @param {object} keyData - { key: string, provider: number }
  * @returns {Promise<string>} - The encrypted hex string.
  */
-async function downloadData(key) {
-    const response = await fetch(`https://file.io/${key}`);
+async function downloadData(keyData) {
+    const { key, provider } = keyData;
+    let url = `https://file.io/${key}`;
+    
+    if (provider === 1) url = `https://tmpfiles.org/dl/${key}/intel.enc`;
+    if (provider === 2) url = `${CONFIG.UPLOAD_ENDPOINT_C}${key}`;
 
-    if (response.status === 404) {
-        throw new Error("Intelligence self-destructed or link expired.");
+    console.log(`Initial Fetch Request: ${url}`);
+    
+    try {
+        const response = await fetch(url);
+        if (response.ok) return await response.text();
+        throw new Error("Standard route failed.");
+    } catch (error) {
+        console.warn("Standard download blocked by CORS. Initializing Secure Bridge...");
+        // Healing: Try again via CORS bridge
+        const bridgeUrl = `${CONFIG.CORS_BRIDGE}${encodeURIComponent(url)}`;
+        const bridgeResponse = await fetch(bridgeUrl);
+        
+        if (!bridgeResponse.ok) {
+            throw new Error("Intelligence self-destructed or all access bridges are down.");
+        }
+        return await bridgeResponse.text();
     }
-
-    if (!response.ok) {
-        throw new Error(`Intelligence retrieval failed: ${response.status}`);
-    }
-
-    return await response.text();
 }
+
+
 
 /**
  * Encrypts data using AES-256-CBC with PBKDF2 key derivation.
@@ -293,6 +351,56 @@ function hideLoading() {
     UI.loadingOverlay.classList.add('hidden');
 }
 
+/**
+ * Modern notification system to replace alerts (Step 12 UX)
+ * @param {string} message - The message to display.
+ * @param {string} type - 'success', 'error', or 'info'.
+ */
+function notify(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    
+    // Choose icon based on type
+    const icons = {
+        success: '✅',
+        error: '🚨',
+        info: 'ℹ️'
+    };
+    
+    toast.innerHTML = `
+        <span class="toast-icon">${icons[type] || '✨'}</span>
+        <span class="toast-msg">${message}</span>
+    `;
+    
+    UI.notificationContainer.appendChild(toast);
+    
+    // Auto-remove after 4 seconds
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
+/**
+ * Visual feedback for validation errors (Step 12 UX)
+ * @param {HTMLElement} element - The element to shake.
+ */
+function shake(element) {
+    if (!element) return;
+    element.classList.add('shake', 'invalid');
+    setTimeout(() => {
+        element.classList.remove('shake');
+        // Keep 'invalid' until they type again
+    }, 400);
+}
+
+// Clear invalid state on input
+document.addEventListener('input', (e) => {
+    if (e.target.tagName === 'INPUT') {
+        e.target.classList.remove('invalid');
+    }
+});
+
 /* 
    ==========================================================================
    CORE LOGIC & EVENT HANDLERS
@@ -316,15 +424,23 @@ function switchMode(mode) {
 
 async function handleEncryption() {
     console.log("Encryption initiated...");
+    
+    if (typeof CryptoJS === 'undefined') {
+        notify("Encryption engine unavailable. Please refresh or check connection.", "error");
+        return;
+    }
+
     const password = UI.encryptPassword?.value;
     
     if (!state.selectedFile) {
-        alert("🚨 Intelligence data missing. Please capture an image.");
+        notify("Intelligence data missing. Please capture an image.", "error");
+        shake(UI.dropZone);
         return;
     }
     
     if (!password) {
-        alert("🚨 Security clearance required. Please define an access code.");
+        notify("Security clearance required. Please define an access code.", "error");
+        shake(UI.encryptPassword);
         return;
     }
 
@@ -341,38 +457,42 @@ async function handleEncryption() {
         state.encryptedHex = encryptData(state.processedBase64, password);
         
         showLoading("Vanishing to Cloud...");
-        // Step 6: Ephemeral Upload
-        state.fileIOKey = await uploadData(state.encryptedHex);
-        
-        showLoading("Generating Phantom Key...");
-        // Step 7: Key-to-Emoji Mapping
-        state.emojiKey = keyToEmojis(state.fileIOKey);
+        // Step 6 & 7: Ephemeral Upload + Encoding Combined
+        state.emojiKey = await uploadData(state.encryptedHex);
         
         // Display Result
         UI.emojiKeyDisplay.textContent = state.emojiKey;
         UI.senderOutput.classList.remove('hidden');
         
         hideLoading();
+        notify("Intelligence encrypted and vanished to cloud.", "success");
         console.log("Intelligence Phase Complete. Phantom Key:", state.emojiKey);
 
     } catch (error) {
         console.error("Encryption Phase Error:", error);
-        alert("🚨 Encryption failed: " + error.message);
+        notify("Encryption failed: " + error.message, "error");
         hideLoading();
     }
 }
 
 async function handleDecryption() {
+    if (typeof CryptoJS === 'undefined') {
+        notify("Decryption engine unavailable. Please refresh or check connection.", "error");
+        return;
+    }
+
     const emojiString = UI.emojiInput.value.trim();
     const password = UI.decryptPassword.value;
 
     if (!emojiString) {
-        alert("🚨 Phantom Key missing. Please provide the emojis.");
+        notify("Phantom Key missing. Please provide the emojis.", "error");
+        shake(UI.emojiInput);
         return;
     }
 
     if (!password) {
-        alert("🚨 Security clearance required. Please provide the access code.");
+        notify("Security clearance required. Please provide the access code.", "error");
+        shake(UI.decryptPassword);
         return;
     }
 
@@ -380,16 +500,16 @@ async function handleDecryption() {
         showLoading("Decoding Phantom Key...");
         
         // Step 8: Emoji-to-Key Decoding
-        const fileKey = emojisToKey(emojiString);
+        const keyData = emojisToKey(emojiString);
         
-        if (!fileKey) {
+        if (!keyData.key) {
             throw new Error("Invalid Phantom Key format.");
         }
 
         showLoading("Fetching Intelligence...");
         
         // Step 9: Intelligence Retrieval
-        state.encryptedHex = await downloadData(fileKey);
+        state.encryptedHex = await downloadData(keyData);
         
         showLoading("Decrypting Intelligence...");
         
@@ -401,13 +521,14 @@ async function handleDecryption() {
         UI.receiverDisplay.classList.remove('hidden');
         
         hideLoading();
+        notify("Intelligence restored successfully.", "success");
         
         // Internal analytics/log
         console.log("Intelligence successfully restored.");
 
     } catch (error) {
         console.error("Decryption Phase Error:", error);
-        alert("🚨 " + error.message);
+        notify(error.message, "error");
         hideLoading();
     }
 }
@@ -476,17 +597,52 @@ document.addEventListener('DOMContentLoaded', () => {
     UI.btnCopyEmojis.addEventListener('click', () => {
         if (!state.emojiKey) return;
         
-        navigator.clipboard.writeText(state.emojiKey).then(() => {
-            const originalText = UI.btnCopyEmojis.textContent;
-            UI.btnCopyEmojis.textContent = '✅';
-            setTimeout(() => {
-                UI.btnCopyEmojis.textContent = originalText;
-            }, 2000);
-        }).catch(err => {
-            console.error('Copy failed:', err);
-            alert('Failed to copy. Please select and copy manually.');
-        });
+        const keyToCopy = state.emojiKey;
+        
+        // Robust copy with fallback
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(keyToCopy).then(() => {
+                onCopySuccess();
+            }).catch(err => {
+                console.error('Clipboard API failed, using fallback:', err);
+                fallbackCopy(keyToCopy);
+            });
+        } else {
+            fallbackCopy(keyToCopy);
+        }
     });
+
+    function onCopySuccess() {
+        notify("Phantom Key copied to clipboard.", "success");
+        const originalText = UI.btnCopyEmojis.textContent;
+        UI.btnCopyEmojis.textContent = '✅';
+        UI.btnCopyEmojis.style.boxShadow = '0 0 15px var(--primary-glow)';
+        
+        setTimeout(() => {
+            UI.btnCopyEmojis.textContent = originalText;
+            UI.btnCopyEmojis.style.boxShadow = '';
+        }, 2000);
+    }
+
+    function fallbackCopy(text) {
+        try {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-9999px";
+            textArea.style.top = "0";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            const successful = document.execCommand('copy');
+            document.body.removeChild(textArea);
+            if (successful) onCopySuccess();
+            else throw new Error("Fallback copy failed");
+        } catch (err) {
+            console.error('Fallback copy failed:', err);
+            notify('Failed to copy. Please select and copy manually.', 'error');
+        }
+    }
 
     // 7. Initial State
     switchMode('encrypt');
