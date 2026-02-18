@@ -307,11 +307,56 @@ input[type="password"] {
   transition: all 0.3s ease;
 }
 
-.input-wrapper {
+.input-wrapper,
+.select-wrapper {
   position: relative;
   display: flex;
   align-items: center;
   width: 100%;
+}
+
+.views-hybrid-input {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.custom-select {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  padding: 1rem 1.25rem;
+  border-radius: 12px;
+  color: #fff;
+  font-family: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  outline: none;
+}
+
+.custom-num-input {
+  width: 100px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--primary-color);
+  padding: 1rem 0.75rem;
+  border-radius: 12px;
+  color: #fff;
+  font-family: 'Fira Code', monospace;
+  font-size: 1rem;
+  text-align: center;
+  box-shadow: 0 0 10px var(--primary-glow);
+  outline: none;
+}
+
+.custom-select:focus, .custom-num-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 15px var(--primary-glow);
+}
+
+.custom-select option {
+  background: #1a1a1a;
+  color: #fff;
 }
 
 .toggle-pass-btn {

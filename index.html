@@ -73,6 +73,21 @@
                     </div>
                 </div>
 
+                <div class="input-group">
+                    <label for="max-views">Max Views (Self-Destruct)</label>
+                    <div class="views-hybrid-input">
+                        <select id="max-views-preset" class="custom-select">
+                            <option value="1">1 View (Phantom)</option>
+                            <option value="5">5 Views (Team)</option>
+                            <option value="10">10 Views (Public)</option>
+                            <option value="0">Unlimited</option>
+                            <option value="custom">Custom amount...</option>
+                        </select>
+                        <input type="number" id="max-views-custom" class="custom-num-input hidden" min="1" max="1000" placeholder="Qty">
+                    </div>
+                    <input type="hidden" id="max-views" value="1">
+                </div>
+
                 <div class="action-area">
                     <button id="btn-initiate" class="primary-btn">
                         <span class="btn-text">INITIATE ENCRYPTION</span>
@@ -124,12 +139,12 @@
                 </div>
 
                 <div class="display-area hidden" id="receiver-display">
-                    <label>Intelligence Restored</label>
+                    <label>Image Restored</label>
                     <div class="image-preview-container">
                         <img id="decrypted-image" src="" alt="Intelligence Data">
                     </div>
                     <div class="button-group horizontal">
-                        <button id="btn-download" class="save-btn">Save Intelligence</button>
+                        <button id="btn-download" class="save-btn">Download image</button>
                         <button id="btn-clear-restored" class="save-btn delete-btn">Clear Result</button>
                     </div>
                 </div>

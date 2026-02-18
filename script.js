@@ -98,7 +98,10 @@ function initUI() {
         btnClearRestored: document.getElementById('btn-clear-restored'),
         btnClearImage: document.getElementById('btn-clear-image'),
         btnToggleEncryptPass: document.getElementById('btn-toggle-encrypt-password'),
-        btnToggleDecryptPass: document.getElementById('btn-toggle-decrypt-password')
+        btnToggleDecryptPass: document.getElementById('btn-toggle-decrypt-password'),
+        maxViews: document.getElementById('max-views'),
+        maxViewsPreset: document.getElementById('max-views-preset'),
+        maxViewsCustom: document.getElementById('max-views-custom')
     };
 
     // Verify critical elements
@@ -204,16 +207,23 @@ async function robustFetch(url, options = {}, retries = 2, timeout = CONFIG.FETC
         }
     }
 }
-async function uploadData(encryptedBase64) {
+async function uploadData(encryptedBase64, maxViews = 1) {
     const blob = new Blob([encryptedBase64], { type: 'text/plain' });
     
     // ROUTE 0: Primary (file.io)
     try {
-        console.log("Attempting Primary Route (file.io) - Direct...");
+        console.log(`Attempting Primary Route (file.io) with ${maxViews} views...`);
         const primaryData = new FormData();
         primaryData.append('file', blob, 'intel.enc');
-        primaryData.append('maxDownloads', '1');
-        primaryData.append('autoDelete', 'true');
+        
+        if (maxViews > 0) {
+            primaryData.append('maxDownloads', maxViews.toString());
+            primaryData.append('autoDelete', 'true');
+        } else {
+            // "Unlimited" - Use timed expiry only
+            primaryData.append('expires', CONFIG.EXPIRY || '1w');
+            primaryData.append('autoDelete', 'false');
+        }
 
         const response = await robustFetch(CONFIG.UPLOAD_ENDPOINT, { 
             method: 'POST', 
@@ -230,8 +240,14 @@ async function uploadData(encryptedBase64) {
             const bridgedUrl = `${bridge}${encodeURIComponent(CONFIG.UPLOAD_ENDPOINT)}`;
             const primaryData = new FormData();
             primaryData.append('file', blob, 'intel.enc');
-            primaryData.append('maxDownloads', '1');
-            primaryData.append('autoDelete', 'true');
+            
+            if (maxViews > 0) {
+                primaryData.append('maxDownloads', maxViews.toString());
+                primaryData.append('autoDelete', 'true');
+            } else {
+                primaryData.append('expires', CONFIG.EXPIRY || '1w');
+                primaryData.append('autoDelete', 'false');
+            }
             
             const response = await robustFetch(bridgedUrl, { 
                 method: 'POST', 
@@ -248,9 +264,13 @@ async function uploadData(encryptedBase64) {
     // ROUTE 1: Fallback (transfer.sh)
     try {
         console.log("Attempting Fallback Route 1 (transfer.sh)...");
+        const headers = { 'Max-Days': '7' };
+        if (maxViews > 0) headers['Max-Downloads'] = maxViews.toString();
+
         const responseB = await robustFetch(`${CONFIG.UPLOAD_ENDPOINT_C}intel.enc`, { 
             method: 'PUT',
-            body: blob 
+            body: blob,
+            headers: headers
         });
         const url = await responseB.text();
         const parts = url.trim().split('/');
@@ -622,7 +642,8 @@ async function handleEncryption() {
         
         showLoading("Processing...");
         // Step 6 & 7: Ephemeral Upload + Encoding Combined
-        state.emojiKey = await uploadData(state.encryptedBase64);
+        const maxViews = UI.maxViews?.value || 1;
+        state.emojiKey = await uploadData(state.encryptedBase64, maxViews);
         
         // Display Result
         UI.emojiKeyDisplay.textContent = state.emojiKey;
@@ -674,23 +695,12 @@ async function handleDecryption() {
 
         showLoading("Fetching Intelligence...");
         
-        // Step 9: Intelligence Retrieval
+        // Intelligence Retrieval
         state.encryptedBase64 = await downloadData(keyData);
-        
-        // Session Guard: Prevent re-extraction in the same session
-        const signature = btoa(state.encryptedBase64.substring(0, 100)); // Sample start of data
-        if (state.extractedSignatures.has(signature)) {
-            throw new Error("Intelligence has already been extracted and self-destructed.");
-        }
-
-        showLoading("Decrypting Intelligence...");
         
         // Step 10: AES Decryption
         state.processedBase64 = decryptData(state.encryptedBase64, password);
         
-        // Mark as extracted
-        state.extractedSignatures.add(signature);
-
         // Step 11: Render & Display
         UI.decryptedImage.src = state.processedBase64;
         UI.receiverDisplay.classList.remove('hidden');
@@ -834,6 +844,37 @@ document.addEventListener('DOMContentLoaded', () => {
     UI.btnToggleDecryptPass.addEventListener('click', () => {
         togglePasswordVisibility(UI.decryptPassword, UI.btnToggleDecryptPass);
     });
+
+    // 5.3 Max Views Hybrid Logic
+    if (UI.maxViewsPreset && UI.maxViewsCustom) {
+        UI.maxViewsPreset.addEventListener('change', () => {
+            const val = UI.maxViewsPreset.value;
+            if (val === 'custom') {
+                UI.maxViewsCustom.classList.remove('hidden');
+                UI.maxViewsCustom.focus();
+                UI.maxViews.value = UI.maxViewsCustom.value || 1;
+            } else {
+                UI.maxViewsCustom.classList.add('hidden');
+                UI.maxViews.value = val;
+                
+                const label = UI.maxViewsPreset.options[UI.maxViewsPreset.selectedIndex].text;
+                notify(`Self-destruct set to ${label}`, "info");
+            }
+        });
+
+        UI.maxViewsCustom.addEventListener('input', () => {
+            let val = parseInt(UI.maxViewsCustom.value);
+            
+            // Allow 0 for unlimited, otherwise fallback to 1
+            if (isNaN(val) || val < 0) val = 1;
+            if (val > 1000) val = 1000;
+            
+            UI.maxViews.value = val;
+            if (val === 0) {
+                notify("Self-destruct set to Unlimited", "info");
+            }
+        });
+    }
 
     UI.btnClearEmojis.addEventListener('click', () => {
         state.emojiKey = null;
