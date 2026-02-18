@@ -5,14 +5,21 @@
 */
 
 const CONFIG = {
-    MAX_IMAGE_DIMENSION: 800, // Reduced for faster cloud vanishing
-    MAX_IMAGE_SIZE: 0.1 * 1024 * 1024, // Optimized threshold
-    JPEG_QUALITY: 0.5, // Tighter compression like professional intelligence tools
+    MAX_IMAGE_DIMENSION: 1200, // Balanced for higher quality
+    MAX_IMAGE_SIZE: 0.5 * 1024 * 1024, // Image itself limited to 500KB
+    MAX_ENCRYPTED_SIZE: 1.0 * 1024 * 1024, // Final blob target ~1MB
+    JPEG_QUALITY: 1.0, // Maximum quality start
     UPLOAD_ENDPOINT: 'https://file.io/',
     UPLOAD_ENDPOINT_B: 'https://tmpfiles.org/api/v1/upload',
     UPLOAD_ENDPOINT_C: 'https://transfer.sh/',
     EXPIRY: '1w',
-    CORS_BRIDGE: 'https://api.allorigins.win/raw?url=',
+    FETCH_TIMEOUT: 12000, // 12s timeout for network operations
+    CORS_BRIDGES: [
+        'https://corsproxy.io/?',
+        'https://api.allorigins.win/raw?url=',
+        'https://api.codetabs.com/v1/proxy?url=',
+        'https://thingproxy.freeboard.io/fetch/'
+    ],
     // 256 Safe, single-character emojis for robust mapping
     EMOJI_MAP: [
         '😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🤩','🥳','😏','😒','😞','😔','😟','😕','🙁','☹️','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🥴','🤢','🤮','🤧','🤨','🧐','🤠','🤡','👿','😈','👹','👺','👻','💀','👽','👾','🤖','💩','😺','😸','😹','😻','😼','😽','🙀','😿','😾','🙈','🙉','🙊','💋','💌','💘','💝','💖','💗','💓','💞','💕','💟','❣️','💔','❤️','🧡','💛','💚','💙','💜','🤎','🖤','🤍','♨️','💢','💥','💫','💦','💨','🕳️','💣','💬','🗨️','🗯️','💭','💤','👋','🤚','🖐️','✋','🖖','👌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏','✍️','💅','🤳','💪','🦾','🦵','🦿','🦶','👂','🦻','👃','🧠','🦷','🦴','👀','👁️','👅','👄','👶','🧒','👦','👧','🧑','👱','👨','🧔','👩','🧓','👴','👵','👲','👳','🧕','👮','👷','💂','🕵️','🤵','👰','👸','🤴','👶','🍼','🧸','🧶'
@@ -60,6 +67,10 @@ function initUI() {
         // Sender Elements
         imagePicker: document.getElementById('image-picker'),
         dropZone: document.getElementById('drop-zone'),
+        dropZoneText: document.getElementById('drop-zone-text'),
+        previewOverlay: document.getElementById('image-preview-overlay'),
+        previewImg: document.getElementById('preview-img'),
+        btnPreviewImage: document.getElementById('btn-preview-image'),
         encryptPassword: document.getElementById('encrypt-password'),
         btnInitiate: document.getElementById('btn-initiate'),
         senderOutput: document.getElementById('sender-output'),
@@ -164,17 +175,31 @@ function emojisToKey(emojiString) {
 }
 
 /**
- * Robust fetcher with retry logic (Wormhole Strategy)
+ * Robust fetcher with retry logic and timeout (Wormhole Strategy)
  */
-async function robustFetch(url, options = {}, retries = 2) {
+async function robustFetch(url, options = {}, retries = 2, timeout = CONFIG.FETCH_TIMEOUT) {
     for (let i = 0; i <= retries; i++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+        
         try {
-            const response = await fetch(url, options);
+            const response = await fetch(url, { 
+                ...options, 
+                signal: controller.signal 
+            });
+            clearTimeout(timeoutId);
+            
             if (response.ok) return response;
             if (response.status === 404) throw new Error("Intelligence expired or self-destructed.");
+            throw new Error(`Server returned ${response.status}`);
         } catch (err) {
-            if (i === retries) throw err;
-            console.warn(`Fetch attempt ${i + 1} failed. Retrying...`, err);
+            clearTimeout(timeoutId);
+            const isAbort = err.name === 'AbortError';
+            const message = isAbort ? `Timeout after ${timeout}ms` : err.message;
+            
+            if (i === retries) throw new Error(message);
+            
+            console.warn(`Fetch attempt ${i + 1} failed (${message}). Retrying...`);
             await new Promise(r => setTimeout(r, 1000 * (i + 1))); // Exponential backoff
         }
     }
@@ -184,7 +209,7 @@ async function uploadData(encryptedBase64) {
     
     // ROUTE 0: Primary (file.io)
     try {
-        console.log("Attempting Primary Route (file.io)...");
+        console.log("Attempting Primary Route (file.io) - Direct...");
         const primaryData = new FormData();
         primaryData.append('file', blob, 'intel.enc');
         primaryData.append('maxDownloads', '1');
@@ -193,11 +218,32 @@ async function uploadData(encryptedBase64) {
         const response = await robustFetch(CONFIG.UPLOAD_ENDPOINT, { 
             method: 'POST', 
             body: primaryData 
-        });
+        }, 1, 6000); // Faster failure for first attempt
 
         const res = await response.json();
         if (res.success) return keyToEmojis(res.key, 0);
-    } catch (e) { console.warn("Primary Route Failed. Engaging Fallback..."); }
+    } catch (e) { 
+        console.warn("Direct Primary Route Failed. Attempting Relay Backup..."); 
+        try {
+            // Bridge Attempt for Case 0
+            const bridge = CONFIG.CORS_BRIDGES[0]; // Try the primary bridge
+            const bridgedUrl = `${bridge}${encodeURIComponent(CONFIG.UPLOAD_ENDPOINT)}`;
+            const primaryData = new FormData();
+            primaryData.append('file', blob, 'intel.enc');
+            primaryData.append('maxDownloads', '1');
+            primaryData.append('autoDelete', 'true');
+            
+            const response = await robustFetch(bridgedUrl, { 
+                method: 'POST', 
+                body: primaryData 
+            }, 0, 8000);
+            
+            const res = await response.json();
+            if (res.success) return keyToEmojis(res.key, 0);
+        } catch (bridgeErr) {
+            console.warn("Primary Relay Backup also failed. Engaging Alternative Providers..."); 
+        }
+    }
 
     // ROUTE 1: Fallback (transfer.sh)
     try {
@@ -245,18 +291,34 @@ async function downloadData(keyData) {
 
     console.log(`Clearing Path for Decryption: ${url}`);
     
+    // 1. Attempt Direct Fetch with short timeout first
     try {
-        // Attempt Direct Fetch First
-        const response = await fetch(url);
-        if (response.ok) return await response.text();
-        throw new Error("Direct route failed.");
+        showLoading("Connecting to Vault...");
+        const response = await robustFetch(url, {}, 0, 4000); 
+        return await response.text();
     } catch (error) {
-        console.warn("Direct path blocked. Initializing MojiMask Bridge...");
-        // Healing: Try again via CORS bridge
-        const bridgeUrl = `${CONFIG.CORS_BRIDGE}${encodeURIComponent(url)}`;
-        const bridgeResponse = await robustFetch(bridgeUrl);
-        return await bridgeResponse.text();
+        if (error.message.includes("self-destructed")) throw error;
+        console.warn("Direct path blocked. Initializing MojiMask Bridge Relay...");
     }
+
+    // 2. Bridge Relay: Try multiple CORS bridges
+    let lastError = null;
+    let bridgeCount = 1;
+    for (const bridge of CONFIG.CORS_BRIDGES) {
+        try {
+            showLoading("Processing...");
+            const bridgeUrl = `${bridge}${encodeURIComponent(url)}`;
+            const bridgeResponse = await robustFetch(bridgeUrl, {}, 0, 8000); 
+            return await bridgeResponse.text();
+        } catch (e) {
+            console.warn(`Bridge ${bridgeCount} failed: ${e.message}`);
+            lastError = e;
+            bridgeCount++;
+            continue; 
+        }
+    }
+
+    throw new Error(lastError ? `All decryption routes failed. Check your connection or the key.` : "Connection to intelligence servers failed.");
 }
 
 
@@ -335,9 +397,19 @@ function decryptData(combinedBase64, password) {
  * @returns {Promise<string>} - Base64 encoded JPEG.
  */
 async function processImage(file) {
-    // Force optimization for EVERYTHING - Wormhole Strategy
-    // Intelligence data must be compact to vanish reliably.
-    console.log(`Optimizing Intelligence Payload (${(file.size / 1024).toFixed(2)}KB)...`);
+    const isLarge = file.size > CONFIG.MAX_IMAGE_SIZE;
+    
+    if (!isLarge) {
+        console.log(`Intelligence within limits (${(file.size / 1024).toFixed(2)}KB). Using original capture.`);
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    console.log(`Optimizing Large Intelligence Payload (${(file.size / 1024).toFixed(2)}KB)...`);
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -347,7 +419,7 @@ async function processImage(file) {
                 let width = img.width;
                 let height = img.height;
 
-                // Step 4: Resize to max dimensions if necessary
+                // Resize to max dimensions
                 if (width > height) {
                     if (width > CONFIG.MAX_IMAGE_DIMENSION) {
                         height *= CONFIG.MAX_IMAGE_DIMENSION / width;
@@ -365,8 +437,30 @@ async function processImage(file) {
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, width, height);
 
-                // Step 4: Convert to Base64 (JPEG format, 0.7 quality)
-                const base64 = canvas.toDataURL('image/jpeg', CONFIG.JPEG_QUALITY);
+                // Optimized Binary Search for maximum quality under 500KB
+                let low = 0.1;
+                let high = 1.0;
+                let quality = 0.95;
+                let base64 = canvas.toDataURL('image/jpeg', quality);
+                
+                // If initial quality is already okay, skip loop
+                if (base64.length * 0.75 > CONFIG.MAX_IMAGE_SIZE) {
+                    // Only run binary search if needed (max 5 iterations for precision)
+                    for (let i = 0; i < 5; i++) {
+                        quality = (low + high) / 2;
+                        base64 = canvas.toDataURL('image/jpeg', quality);
+                        if (base64.length * 0.75 > CONFIG.MAX_IMAGE_SIZE) {
+                            high = quality;
+                        } else {
+                            low = quality;
+                        }
+                    }
+                    // Final pass at the 'low' value to ensure we are under the limit
+                    quality = low;
+                    base64 = canvas.toDataURL('image/jpeg', quality);
+                }
+                
+                console.log(`Optimization complete: Quality=${quality.toFixed(2)}, Image Size=${(base64.length * 0.75 / 1024).toFixed(2)}KB`);
                 resolve(base64);
             };
             img.onerror = reject;
@@ -526,7 +620,7 @@ async function handleEncryption() {
         // Step 5: AES-256 Encryption
         state.encryptedBase64 = encryptData(state.processedBase64, password);
         
-        showLoading("Vanishing to Cloud...");
+        showLoading("Processing...");
         // Step 6 & 7: Ephemeral Upload + Encoding Combined
         state.emojiKey = await uploadData(state.encryptedBase64);
         
@@ -536,11 +630,13 @@ async function handleEncryption() {
         
         hideLoading();
         notify("Encryption completed.", "success");
+        
         console.log("Intelligence Phase Complete. Phantom Key:", state.emojiKey);
 
     } catch (error) {
         console.error("Encryption Phase Error:", error);
-        notify("Encryption failed: " + error.message, "error");
+        const errorMsg = error.message.includes("timeout") ? "Intelligence upload timed out. Try a smaller image." : error.message;
+        notify("Encryption failed: " + errorMsg, "error");
         hideLoading();
     }
 }
@@ -602,7 +698,6 @@ async function handleDecryption() {
         hideLoading();
         notify("Intelligence restored successfully.", "success");
         
-        // Internal analytics/log
         console.log("Intelligence successfully restored.");
 
     } catch (error) {
@@ -632,20 +727,49 @@ function handleFileSelect(e) {
         state.selectedFile = file;
         
         // Visual feedback for drop zone
-        const dropZoneText = UI.dropZone.querySelector('p');
-        dropZoneText.textContent = `Captured: ${file.name}`;
+        const dropZoneLabel = UI.dropZoneText.querySelector('p');
+        dropZoneLabel.textContent = `Captured: ${file.name}`;
         UI.dropZone.style.borderColor = 'var(--primary-color)';
         UI.btnClearImage.classList.add('visible');
+        UI.btnPreviewImage.classList.add('visible');
+
+        // Prepare preview source
+        const reader = new FileReader();
+        reader.onload = (re) => {
+            UI.previewImg.src = re.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+function togglePreview(e) {
+    if (e) e.stopPropagation();
+    if (!state.selectedFile) return;
+
+    const isShowing = !UI.previewOverlay.classList.contains('hidden');
+    if (isShowing) {
+        UI.previewOverlay.classList.add('hidden');
+        UI.btnPreviewImage.classList.remove('active');
+        UI.btnPreviewImage.textContent = '👁️';
+    } else {
+        UI.previewOverlay.classList.remove('hidden');
+        UI.btnPreviewImage.classList.add('active');
+        UI.btnPreviewImage.textContent = '🕶️'; // Change to "masked" eye while viewing
     }
 }
 
 function clearImageSelection() {
     state.selectedFile = null;
     UI.imagePicker.value = '';
-    const dropZoneText = UI.dropZone.querySelector('p');
-    dropZoneText.textContent = 'Click or Drag Image';
+    const dropZoneLabel = UI.dropZoneText.querySelector('p');
+    dropZoneLabel.textContent = 'Upload or Drag Image';
     UI.dropZone.style.borderColor = 'var(--border-color)';
     UI.btnClearImage.classList.remove('visible');
+    UI.btnPreviewImage.classList.remove('visible');
+    UI.btnPreviewImage.classList.remove('active');
+    UI.btnPreviewImage.textContent = '👁️';
+    UI.previewOverlay.classList.add('hidden');
+    UI.previewImg.src = '';
     notify("Intelligence data removed.", "info");
 }
 
@@ -721,6 +845,15 @@ document.addEventListener('DOMContentLoaded', () => {
     UI.btnClearImage.addEventListener('click', (e) => {
         e.stopPropagation(); // Avoid triggering file picker
         clearImageSelection();
+    });
+
+    UI.btnPreviewImage.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePreview(e);
+    });
+
+    UI.previewOverlay.addEventListener('click', (e) => {
+        togglePreview(e);
     });
 
     UI.btnClearRestored.addEventListener('click', () => {

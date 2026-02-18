@@ -25,7 +25,7 @@
     
     <main class="app-container" id="main-app">
         <header class="hero-section">
-            <h1 class="glitch-text" data-text="MojiMask">MojiMask</h1>
+            <h1 class="glitch-text" data-text="EmojiMask">EmojiMask</h1>
             <p class="subtitle">Image To Emoji Encryption Tool </p>
         </header>
 
@@ -51,12 +51,16 @@
                 <div class="input-group">
                     <label for="image-picker">Upload an image</label>
                     <div class="file-drop-zone" id="drop-zone">
-                        <input type="file" id="image-picker" accept="image/*">
-                        <div class="drop-zone-content">
+                        <input type="file" id="image-picker" accept="image/*, .heic, .heif, .avif">
+                        <div class="drop-zone-content" id="drop-zone-text">
                             <span class="upload-icon">📸</span>
                             <p>Upload or Drag Image</p>
                         </div>
+                        <div id="image-preview-overlay" class="preview-overlay hidden">
+                            <img id="preview-img" src="" alt="Capture Preview">
+                        </div>
                         <button id="btn-clear-image" class="clear-btn" title="Clear Image">×</button>
+                        <button id="btn-preview-image" class="preview-btn" title="Preview Image">👁️</button>
                     </div>
                 </div>
 

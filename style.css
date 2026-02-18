@@ -398,11 +398,70 @@ input[type="password"] {
   text-align: center;
   cursor: pointer;
   transition: all 0.3s ease;
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .file-drop-zone:hover {
   border-color: var(--accent-color);
   background: rgba(0, 210, 255, 0.05);
+}
+
+.preview-overlay {
+    position: absolute;
+    inset: 5px;
+    border-radius: 12px;
+    background: var(--bg-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    overflow: hidden;
+}
+
+.preview-overlay img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.preview-btn {
+  position: absolute;
+  right: 1rem;
+  bottom: 0.8rem;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.4rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  opacity: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  z-index: 10;
+}
+
+.preview-btn.visible {
+  opacity: 0.6;
+  pointer-events: auto;
+}
+
+.preview-btn:hover {
+  opacity: 1;
+  color: var(--primary-color);
+  text-shadow: 0 0 8px var(--primary-glow);
+  transform: scale(1.1);
+}
+
+.preview-btn.active {
+    color: var(--accent-color);
+    text-shadow: 0 0 8px var(--accent-glow);
 }
 
 #image-picker {
