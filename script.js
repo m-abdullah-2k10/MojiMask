@@ -188,7 +188,13 @@ async function robustFetch(url, options = {}, retries = 2, timeout = CONFIG.FETC
         try {
             const response = await fetch(url, { 
                 ...options, 
-                signal: controller.signal 
+                signal: controller.signal,
+                cache: 'no-store',
+                headers: {
+                    ...options.headers,
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
+                }
             });
             clearTimeout(timeoutId);
             
@@ -217,12 +223,10 @@ async function uploadData(encryptedBase64, maxViews = 1) {
         primaryData.append('file', blob, 'intel.enc');
         
         if (maxViews > 0) {
-            primaryData.append('maxDownloads', maxViews.toString());
-            primaryData.append('autoDelete', 'true');
+            primaryData.append('maxdownloads', maxViews.toString());
         } else {
             // "Unlimited" - Use timed expiry only
             primaryData.append('expires', CONFIG.EXPIRY || '1w');
-            primaryData.append('autoDelete', 'false');
         }
 
         const response = await robustFetch(CONFIG.UPLOAD_ENDPOINT, { 
@@ -242,11 +246,9 @@ async function uploadData(encryptedBase64, maxViews = 1) {
             primaryData.append('file', blob, 'intel.enc');
             
             if (maxViews > 0) {
-                primaryData.append('maxDownloads', maxViews.toString());
-                primaryData.append('autoDelete', 'true');
+                primaryData.append('maxdownloads', maxViews.toString());
             } else {
                 primaryData.append('expires', CONFIG.EXPIRY || '1w');
-                primaryData.append('autoDelete', 'false');
             }
             
             const response = await robustFetch(bridgedUrl, { 
@@ -308,6 +310,10 @@ async function downloadData(keyData) {
     
     if (provider === 1) url = `${CONFIG.UPLOAD_ENDPOINT_C}${key}/intel.enc`;
     if (provider === 2) url = `https://tmpfiles.org/dl/${key}/intel.enc`;
+
+    // Add cache-buster to ensure we get the latest state from the server
+    const buster = `?cb=${Date.now()}`;
+    url += buster;
 
     console.log(`Clearing Path for Decryption: ${url}`);
     
