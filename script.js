@@ -136,8 +136,20 @@ function initUI() {
  * @param {number} providerIndex - 0: Primary, 1: Fallback B, 2: Fallback C
  * @returns {string} - The emoji representation.
  */
-function keyToEmojis(key, providerIndex = 0) {
+function keyToEmojis(key, providerIndex = 0, maxViews = 0) {
     const signals = ['🛡️', '🛰️', '🛸'];
+    // Encode maxViews as a number emoji 0️⃣-9️⃣ (0 = unlimited, 1-9 = exact count)
+    // We cap display at 9; higher values also stored as 9 but unlimited is 0️⃣
+    const viewEmojis = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣'];
+    // For values > 9, encode as two digits using a pair of number emojis
+    let viewPrefix = '';
+    if (maxViews === 0) {
+        viewPrefix = '0️⃣'; // unlimited
+    } else {
+        // Encode each digit
+        viewPrefix = String(maxViews).split('').map(d => viewEmojis[parseInt(d)]).join('');
+    }
+
     const encoder = new TextEncoder();
     const bytes = encoder.encode(key);
     
@@ -145,7 +157,7 @@ function keyToEmojis(key, providerIndex = 0) {
         .map(byte => CONFIG.EMOJI_MAP[byte] || '❓')
         .join('');
         
-    return signals[providerIndex] + emojis;
+    return signals[providerIndex] + viewPrefix + emojis;
 }
 
 /**
@@ -162,11 +174,21 @@ function emojisToKey(emojiString) {
         emojis = Array.from(emojiString);
     }
 
+    // First emoji: provider signal
     const signal = emojis.shift();
     let provider = 0;
     if (signal === '🛰️') provider = 1;
     if (signal === '🛸') provider = 2;
 
+    // Next emoji(s): view count digits (number emojis 0️⃣-9️⃣)
+    const NUMBER_EMOJIS = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣'];
+    let maxViewsStr = '';
+    while (emojis.length > 0 && NUMBER_EMOJIS.includes(emojis[0])) {
+        maxViewsStr += NUMBER_EMOJIS.indexOf(emojis.shift());
+    }
+    const maxViews = maxViewsStr === '' ? 0 : parseInt(maxViewsStr);
+
+    // Remaining emojis: the actual key
     const bytes = emojis
         .map(emoji => EMOJI_TO_INDEX.get(emoji))
         .filter(index => index !== undefined);
@@ -174,7 +196,7 @@ function emojisToKey(emojiString) {
     const decoder = new TextDecoder();
     const key = decoder.decode(new Uint8Array(bytes));
 
-    return { key, provider };
+    return { key, provider, maxViews };
 }
 
 /**
@@ -223,7 +245,8 @@ async function uploadData(encryptedBase64, maxViews = 1) {
         primaryData.append('file', blob, 'intel.enc');
         
         if (maxViews > 0) {
-            primaryData.append('maxdownloads', maxViews.toString());
+            primaryData.append('maxDownloads', maxViews.toString());
+            primaryData.append('autoDelete', 'true');
         } else {
             // "Unlimited" - Use timed expiry only
             primaryData.append('expires', CONFIG.EXPIRY || '1w');
@@ -235,7 +258,8 @@ async function uploadData(encryptedBase64, maxViews = 1) {
         }, 1, 6000); // Faster failure for first attempt
 
         const res = await response.json();
-        if (res.success) return keyToEmojis(res.key, 0);
+        console.log("file.io upload response:", res);
+        if (res.success) return keyToEmojis(res.key, 0, parseInt(maxViews));
     } catch (e) { 
         console.warn("Direct Primary Route Failed. Attempting Relay Backup..."); 
         try {
@@ -246,7 +270,8 @@ async function uploadData(encryptedBase64, maxViews = 1) {
             primaryData.append('file', blob, 'intel.enc');
             
             if (maxViews > 0) {
-                primaryData.append('maxdownloads', maxViews.toString());
+                primaryData.append('maxDownloads', maxViews.toString());
+                primaryData.append('autoDelete', 'true');
             } else {
                 primaryData.append('expires', CONFIG.EXPIRY || '1w');
             }
@@ -257,7 +282,7 @@ async function uploadData(encryptedBase64, maxViews = 1) {
             }, 0, 8000);
             
             const res = await response.json();
-            if (res.success) return keyToEmojis(res.key, 0);
+            if (res.success) return keyToEmojis(res.key, 0, parseInt(maxViews));
         } catch (bridgeErr) {
             console.warn("Primary Relay Backup also failed. Engaging Alternative Providers..."); 
         }
@@ -277,7 +302,7 @@ async function uploadData(encryptedBase64, maxViews = 1) {
         const url = await responseB.text();
         const parts = url.trim().split('/');
         const id = parts[parts.length - 2]; 
-        return keyToEmojis(id, 1);
+        return keyToEmojis(id, 1, parseInt(maxViews));
     } catch (e) { console.warn("Fallback Route 1 Failed."); }
 
     // ROUTE 2: Deep Fallback (tmpfiles.org)
@@ -699,6 +724,27 @@ async function handleDecryption() {
             throw new Error("Invalid Phantom Key format.");
         }
 
+        // ── View-Count Enforcement ──────────────────────────────────────────
+        // The max-view limit is encoded in the emoji key itself (client-side).
+        // We store a counter in localStorage keyed by the file key.
+        // This works regardless of CORS proxies.
+        const storageKey = `mojimask_views_${keyData.key}`;
+        const maxViews = keyData.maxViews; // 0 = unlimited
+
+        if (maxViews > 0) {
+            const stored = JSON.parse(localStorage.getItem(storageKey) || '{}');
+            const usedViews = stored.count || 0;
+
+            if (usedViews >= maxViews) {
+                throw new Error(`Access denied. This intelligence has been viewed ${maxViews} time(s) and has self-destructed.`);
+            }
+            
+            // Show remaining views before decrementing
+            const remaining = maxViews - usedViews - 1;
+            console.log(`View ${usedViews + 1} of ${maxViews}. ${remaining} remaining after this.`);
+        }
+        // ────────────────────────────────────────────────────────────────────
+
         showLoading("Fetching Intelligence...");
         
         // Intelligence Retrieval
@@ -712,7 +758,23 @@ async function handleDecryption() {
         UI.receiverDisplay.classList.remove('hidden');
         
         hideLoading();
-        notify("Intelligence restored successfully.", "success");
+
+        // ── Increment View Counter (success only) ──────────────────────────
+        if (maxViews > 0) {
+            const stored = JSON.parse(localStorage.getItem(storageKey) || '{}');
+            const newCount = (stored.count || 0) + 1;
+            localStorage.setItem(storageKey, JSON.stringify({ count: newCount, max: maxViews }));
+
+            const remaining = maxViews - newCount;
+            if (remaining === 0) {
+                notify(`Intelligence restored. ⚠️ This was the FINAL view — key is now destroyed.`, "success");
+            } else {
+                notify(`Intelligence restored. ${remaining} view(s) remaining before self-destruct.`, "success");
+            }
+        } else {
+            notify("Intelligence restored successfully.", "success");
+        }
+        // ────────────────────────────────────────────────────────────────────
         
         console.log("Intelligence successfully restored.");
 
