@@ -12,6 +12,7 @@ const CONFIG = {
     UPLOAD_ENDPOINT: 'https://file.io/',
     UPLOAD_ENDPOINT_B: 'https://tmpfiles.org/api/v1/upload',
     UPLOAD_ENDPOINT_C: 'https://transfer.sh/',
+    UPLOAD_ENDPOINT_D: 'https://0x0.st/',
     EXPIRY: '1w',
     FETCH_TIMEOUT: 12000, // 12s timeout for network operations
     CORS_BRIDGES: [
@@ -248,23 +249,21 @@ async function uploadData(encryptedBase64, maxViews = 1) {
             primaryData.append('maxDownloads', maxViews.toString());
             primaryData.append('autoDelete', 'true');
         } else {
-            // "Unlimited" - Use timed expiry only
             primaryData.append('expires', CONFIG.EXPIRY || '1w');
         }
 
         const response = await robustFetch(CONFIG.UPLOAD_ENDPOINT, { 
             method: 'POST', 
             body: primaryData 
-        }, 1, 6000); // Faster failure for first attempt
+        }, 1, 6000);
 
         const res = await response.json();
         console.log("file.io upload response:", res);
         if (res.success) return keyToEmojis(res.key, 0, parseInt(maxViews));
     } catch (e) { 
-        console.warn("Direct Primary Route Failed. Attempting Relay Backup..."); 
+        console.warn("Direct Primary Route Failed. Attempting Relay Backup...");
         try {
-            // Bridge Attempt for Case 0
-            const bridge = CONFIG.CORS_BRIDGES[0]; // Try the primary bridge
+            const bridge = CONFIG.CORS_BRIDGES[0];
             const bridgedUrl = `${bridge}${encodeURIComponent(CONFIG.UPLOAD_ENDPOINT)}`;
             const primaryData = new FormData();
             primaryData.append('file', blob, 'intel.enc');
@@ -288,7 +287,7 @@ async function uploadData(encryptedBase64, maxViews = 1) {
         }
     }
 
-    // ROUTE 1: Fallback (transfer.sh)
+    // ROUTE 1: Fallback A (transfer.sh)
     try {
         console.log("Attempting Fallback Route 1 (transfer.sh)...");
         const headers = { 'Max-Days': '7' };
@@ -298,78 +297,142 @@ async function uploadData(encryptedBase64, maxViews = 1) {
             method: 'PUT',
             body: blob,
             headers: headers
-        });
+        }, 1, 8000);
         const url = await responseB.text();
         const parts = url.trim().split('/');
         const id = parts[parts.length - 2]; 
-        return keyToEmojis(id, 1, parseInt(maxViews));
-    } catch (e) { console.warn("Fallback Route 1 Failed."); }
+        if (id) return keyToEmojis(id, 1, parseInt(maxViews));
+    } catch (e) { console.warn("Fallback Route 1 (transfer.sh) Failed:", e.message); }
 
-    // ROUTE 2: Deep Fallback (tmpfiles.org)
+    // ROUTE 2: Fallback B (0x0.st) — enforces server-side max-days (no download limit, but reliable)
+    // Still useful as it does store the file. View-limit enforcement falls back to client-side localStorage.
+    try {
+        console.log("Attempting Fallback Route 2 (0x0.st)...");
+        const zeroXData = new FormData();
+        zeroXData.append('file', blob, 'intel.enc');
+        // 0x0.st supports secret parameter for unlisted files
+        zeroXData.append('secret', '');
+
+        const responseD = await robustFetch(CONFIG.UPLOAD_ENDPOINT_D, {
+            method: 'POST',
+            body: zeroXData
+        }, 1, 10000);
+        const urlD = await responseD.text();
+        const trimmedUrl = urlD.trim();
+        if (trimmedUrl.startsWith('http')) {
+            // 0x0.st returns raw URL e.g. https://0x0.st/XYZ.enc
+            // Encode the full URL as the key (provider 2 handles raw URL keys)
+            const key0x0 = encodeURIComponent(trimmedUrl);
+            // Use provider=3 to signal 0x0.st, client-side view limit enforcement
+            if (maxViews > 0) {
+                notify(`⚠️ Primary providers unreachable. Upload succeeded via fallback. View limit (${maxViews}) is enforced locally on this device.`, "info");
+            }
+            return keyToEmojis(key0x0, 3, parseInt(maxViews));
+        }
+    } catch (e) { console.warn("Fallback Route 2 (0x0.st) Failed:", e.message); }
+
+    // ROUTE 3: Deep Fallback (tmpfiles.org) — no server-side download limit
+    // For capped view limits: still upload, but enforce limit via client-side localStorage only.
     try {
         console.log("Attempting Deep Fallback (tmpfiles.org)...");
         const fallBackData = new FormData();
         fallBackData.append('file', blob, 'intel.enc');
-        
-        const responseC = await robustFetch(CONFIG.UPLOAD_ENDPOINT_B, { 
-            method: 'POST', 
-            body: fallBackData 
-        });
-        const resC = await responseC.json();
-        const id = resC.data.url.split('/').slice(-2, -1)[0]; 
-        return keyToEmojis(id, 2);
-    } catch (e) { console.warn("Deep Fallback Failed."); }
 
-    throw new Error("ALL DATA ROUTES BLOCKED. This usually happens due to extreme AdBlock settings or size limits.");
+        const responseC = await robustFetch(CONFIG.UPLOAD_ENDPOINT_B, {
+            method: 'POST',
+            body: fallBackData
+        }, 1, 10000);
+        const resC = await responseC.json();
+        const id = resC.data.url.split('/').slice(-2, -1)[0];
+        if (id) {
+            if (maxViews > 0) {
+                notify(`⚠️ Primary providers unreachable. Upload succeeded via fallback. View limit (${maxViews}) is enforced locally on this device.`, "info");
+            }
+            return keyToEmojis(id, 2, parseInt(maxViews)); // pass actual maxViews so client-side enforcement still works
+        }
+    } catch (e) { console.warn("Deep Fallback (tmpfiles.org) Failed:", e.message); }
+
+    throw new Error("ALL DATA ROUTES BLOCKED. Check your network/AdBlock settings and try again.");
 }
 
 
 /**
  * Retrieves encrypted data from cloud provider with CORS-bridge-healing.
- * @param {object} keyData - { key: string, provider: number }
- * @returns {Promise<string>} - The encrypted hex string.
+ *
+ * Download strategy depends on whether the key has a view limit:
+ *
+ * LIMITED KEYS (file.io / transfer.sh with maxDownloads set):
+ *   A direct browser GET is CORS-blocked, but the server STILL processes
+ *   the request and counts it against maxDownloads — wasting a view slot.
+ *   We skip the direct attempt entirely and go straight to a CORS bridge,
+ *   which performs a clean server-to-server request (one slot, one view).
+ *
+ * UNLIMITED KEYS / tmpfiles.org:
+ *   No download counter at risk. Try direct first (fastest), then bridges.
+ *
+ * @param {object} keyData - { key: string, provider: number, maxViews: number }
+ * @returns {Promise<string>} - The encrypted Base64 string.
  */
 async function downloadData(keyData) {
-    const { key, provider } = keyData;
+    const { key, provider, maxViews } = keyData;
     let url = `https://file.io/${key}`;
-    
+
     if (provider === 1) url = `${CONFIG.UPLOAD_ENDPOINT_C}${key}/intel.enc`;
     if (provider === 2) url = `https://tmpfiles.org/dl/${key}/intel.enc`;
+    if (provider === 3) url = decodeURIComponent(key); // 0x0.st: key is full encoded URL
 
-    // Add cache-buster to ensure we get the latest state from the server
-    const buster = `?cb=${Date.now()}`;
-    url += buster;
+    // Cache-buster so proxies don't serve a stale cached copy
+    url += `?cb=${Date.now()}`;
 
-    console.log(`Clearing Path for Decryption: ${url}`);
-    
-    // 1. Attempt Direct Fetch with short timeout first
-    try {
-        showLoading("Connecting to Vault...");
-        const response = await robustFetch(url, {}, 0, 4000); 
-        return await response.text();
-    } catch (error) {
-        if (error.message.includes("self-destructed")) throw error;
-        console.warn("Direct path blocked. Initializing MojiMask Bridge Relay...");
+    console.log(`Vault path: ${url}`);
+
+    // Determine whether this provider tracks server-side download counts.
+    // Providers 0 (file.io) and 1 (transfer.sh) enforce limits server-side.
+    // Providers 2 (tmpfiles.org) and 3 (0x0.st) enforce via client-side localStorage only.
+    const hasDownloadQuota = (provider === 0 || provider === 1) && maxViews > 0;
+
+    if (!hasDownloadQuota) {
+        // ── No server-side quota: tmpfiles / 0x0.st / unlimited keys ────────
+        // Safe to attempt direct (no quota to waste), fall back to bridges.
+        try {
+            showLoading("Connecting to Vault...");
+            const response = await robustFetch(url, {}, 0, 4000);
+            return await response.text();
+        } catch (error) {
+            if (error.message.includes("self-destructed")) throw error;
+            console.warn("Direct path blocked. Initializing Bridge Relay...");
+        }
+    } else {
+        // ── Limited key: skip direct GET to preserve the download quota ─────
+        // Each real download from the server = 1 view used against maxDownloads.
+        // Going straight to the bridge ensures exactly 1 slot is consumed per view.
+        console.log(`Limited key (${maxViews} max views) — routing directly through relay to preserve quota.`);
+        showLoading("Opening Secure Relay...");
     }
 
-    // 2. Bridge Relay: Try multiple CORS bridges
+    // ── Bridge Relay ────────────────────────────────────────────────────────
+    // The bridge server makes the request to file.io on our behalf (server-to-server),
+    // so CORS is not an issue and exactly 1 download is consumed per bridge attempt.
     let lastError = null;
     let bridgeCount = 1;
     for (const bridge of CONFIG.CORS_BRIDGES) {
         try {
             showLoading("Processing...");
             const bridgeUrl = `${bridge}${encodeURIComponent(url)}`;
-            const bridgeResponse = await robustFetch(bridgeUrl, {}, 0, 8000); 
+            const bridgeResponse = await robustFetch(bridgeUrl, {}, 0, 8000);
             return await bridgeResponse.text();
         } catch (e) {
             console.warn(`Bridge ${bridgeCount} failed: ${e.message}`);
             lastError = e;
             bridgeCount++;
-            continue; 
+            continue;
         }
     }
 
-    throw new Error(lastError ? `All decryption routes failed. Check your connection or the key.` : "Connection to intelligence servers failed.");
+    throw new Error(lastError
+        ? `All decryption routes failed. Check your connection or verify the key is still valid.`
+        : "Connection to intelligence servers failed."
+    );
 }
 
 
@@ -673,13 +736,23 @@ async function handleEncryption() {
         
         showLoading("Processing...");
         // Step 6 & 7: Ephemeral Upload + Encoding Combined
-        const maxViews = UI.maxViews?.value || 1;
+        const maxViews = parseInt(UI.maxViews?.value) || 1;
         state.emojiKey = await uploadData(state.encryptedBase64, maxViews);
         
         // Display Result
         UI.emojiKeyDisplay.textContent = state.emojiKey;
         UI.senderOutput.classList.remove('hidden');
-        
+
+        // Dynamically update the status message to reflect the actual view limit chosen
+        const statusMsg = UI.senderOutput.querySelector('.status-msg');
+        if (statusMsg) {
+            if (maxViews === 0) {
+                statusMsg.textContent = '⚠️ Unlimited views — expires after 7 days.';
+            } else {
+                statusMsg.textContent = `⚠️ Self-destructs after ${maxViews} view${maxViews > 1 ? 's' : ''}.`;
+            }
+        }
+
         hideLoading();
         notify("Encryption completed.", "success");
         
