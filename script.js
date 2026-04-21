@@ -209,16 +209,11 @@ async function robustFetch(url, options = {}, retries = 2, timeout = CONFIG.FETC
         const timeoutId = setTimeout(() => controller.abort(), timeout);
         
         try {
-            const response = await fetch(url, { 
-                ...options, 
-                signal: controller.signal,
-                cache: 'no-store',
-                headers: {
-                    ...options.headers,
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
-                }
-            });
+            const fetchOptions = { ...options, signal: controller.signal };
+            if (options.headers && Object.keys(options.headers).length > 0) {
+                fetchOptions.headers = options.headers;
+            }
+            const response = await fetch(url, fetchOptions);
             clearTimeout(timeoutId);
             
             if (response.ok) return response;
@@ -239,52 +234,71 @@ async function robustFetch(url, options = {}, retries = 2, timeout = CONFIG.FETC
 async function uploadData(encryptedBase64, maxViews = 1) {
     const blob = new Blob([encryptedBase64], { type: 'text/plain' });
     
-    // ROUTE 0: Primary (file.io)
-    try {
-        console.log(`Attempting Primary Route (file.io) with ${maxViews} views...`);
-        const primaryData = new FormData();
-        primaryData.append('file', blob, 'intel.enc');
-        
-        if (maxViews > 0) {
-            primaryData.append('maxDownloads', maxViews.toString());
-            primaryData.append('autoDelete', 'true');
-        } else {
-            primaryData.append('expires', CONFIG.EXPIRY || '1w');
-        }
+    // ROUTE 0: Primary (file.io) via Priority Proxy Queue
+    // Proxies are tried in priority order: Cloudflare Worker first, then public CORS bridges.
+    const UPLOAD_PROXY_QUEUE = [
+        { name: 'Cloudflare Worker',  url: 'https://rapid-sun-3368.codegenious-2k10.workers.dev/', timeout: 10000 },
+        ...CONFIG.CORS_BRIDGES.map((bridge, i) => ({
+            name: `Public Bridge ${i + 1}`,
+            url: bridge,
+            timeout: 8000
+        }))
+    ];
 
-        const response = await robustFetch(CONFIG.UPLOAD_ENDPOINT, { 
-            method: 'POST', 
-            body: primaryData 
-        }, 1, 6000);
+    {
+        let proxyAttempt = 0;
+        for (const proxy of UPLOAD_PROXY_QUEUE) {
+            proxyAttempt++;
+            try {
+                // Smart URL construction: if proxy doesn't have '?' or end in '/', add '?' for query-style forwarding
+                const separator = proxy.url.includes('?') ? '' : (proxy.url.endsWith('/') ? '' : '?');
+                const proxiedUrl = `${proxy.url}${separator}${encodeURIComponent(CONFIG.UPLOAD_ENDPOINT)}`;
+                console.log(`[Proxy ${proxyAttempt}/${UPLOAD_PROXY_QUEUE.length}] Trying ${proxy.name} for file.io upload (${maxViews} views)...`);
 
-        const res = await response.json();
-        console.log("file.io upload response:", res);
-        if (res.success) return keyToEmojis(res.key, 0, parseInt(maxViews));
-    } catch (e) { 
-        console.warn("Direct Primary Route Failed. Attempting Relay Backup...");
-        try {
-            const bridge = CONFIG.CORS_BRIDGES[0];
-            const bridgedUrl = `${bridge}${encodeURIComponent(CONFIG.UPLOAD_ENDPOINT)}`;
-            const primaryData = new FormData();
-            primaryData.append('file', blob, 'intel.enc');
-            
-            if (maxViews > 0) {
-                primaryData.append('maxDownloads', maxViews.toString());
-                primaryData.append('autoDelete', 'true');
-            } else {
-                primaryData.append('expires', CONFIG.EXPIRY || '1w');
+                const primaryData = new FormData();
+                primaryData.append('file', blob, 'intel.enc');
+
+                if (maxViews > 0) {
+                    primaryData.append('maxDownloads', maxViews.toString());
+                    primaryData.append('autoDelete', 'true');
+                } else {
+                    primaryData.append('expires', CONFIG.EXPIRY || '1w');
+                }
+
+                const response = await robustFetch(proxiedUrl, {
+                    method: 'POST',
+                    body: primaryData
+                }, 0, proxy.timeout);
+
+                let res;
+                try {
+                    res = await response.json();
+                } catch (jsonErr) {
+                    console.warn(`[${proxy.name}] Non-JSON response received. Trying next proxy...`);
+                    continue;
+                }
+
+                console.log(`[${proxy.name}] file.io response:`, res);
+                if (res && res.success) {
+                    if (proxyAttempt > 1) console.log(`✅ Upload succeeded via fallback proxy: ${proxy.name}`);
+                    return keyToEmojis(res.key, 0, parseInt(maxViews));
+                }
+
+                // If specialized worker failed with path, try it with query param as last resort for that proxy
+                if (proxy.name === 'Cloudflare Worker' && !proxy.url.includes('?') && !proxiedUrl.includes('?url=')) {
+                   console.log(`[${proxy.name}] Path-style failed. Attempting query-style fallback...`);
+                   const queryUrl = `${proxy.url}${proxy.url.endsWith('/') ? '' : '/'}?url=${encodeURIComponent(CONFIG.UPLOAD_ENDPOINT)}`;
+                   const qResponse = await robustFetch(queryUrl, { method: 'POST', body: primaryData }, 0, proxy.timeout);
+                   const qRes = await qResponse.json();
+                   if (qRes && qRes.success) return keyToEmojis(qRes.key, 0, parseInt(maxViews));
+                }
+
+                console.warn(`[${proxy.name}] file.io returned success=false or could not be parsed. Trying next proxy...`);
+            } catch (err) {
+                console.warn(`[${proxy.name}] Failed: ${err.message}. ${proxyAttempt < UPLOAD_PROXY_QUEUE.length ? 'Trying next proxy...' : 'All proxies exhausted.'}`);
             }
-            
-            const response = await robustFetch(bridgedUrl, { 
-                method: 'POST', 
-                body: primaryData 
-            }, 0, 8000);
-            
-            const res = await response.json();
-            if (res.success) return keyToEmojis(res.key, 0, parseInt(maxViews));
-        } catch (bridgeErr) {
-            console.warn("Primary Relay Backup also failed. Engaging Alternative Providers..."); 
         }
+        console.warn("All file.io proxy routes failed. Engaging alternative providers...");
     }
 
     // ROUTE 1: Fallback A (transfer.sh)
