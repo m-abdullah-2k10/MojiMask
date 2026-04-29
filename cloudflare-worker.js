@@ -154,6 +154,49 @@ async function handleUpload(request) {
   }
 }
 
+// ─── Peek (read-only, no counter change): GET /peek/{key} ─────────────────
+// Returns the encrypted payload WITHOUT decrementing the download counter or
+// deleting the file. Used by the client to test the password first.
+async function handleFilePeek(key) {
+  var KV = getKV();
+  if (!KV) {
+    return jsonError('KV storage not configured.', 500);
+  }
+
+  try {
+    var result = await KV.getWithMetadata(key);
+
+    if (result.value === null) {
+      return jsonError('File not found. It may have expired or been deleted.', 404);
+    }
+
+    var meta = result.metadata || {};
+    var maxDl = meta.maxDownloads || 0;
+    var currentDl = meta.downloads || 0;
+
+    // Still respect the exhausted-limit check so callers see 404 properly
+    if (maxDl > 0 && currentDl >= maxDl) {
+      await KV.delete(key);
+      return jsonError('File has been deleted after reaching max downloads.', 404);
+    }
+
+    // Return the raw data — counter is NOT changed
+    return new Response(result.value, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/plain',
+        'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+        'X-Downloads': String(currentDl),
+        'X-Max-Downloads': String(maxDl),
+        'X-Peek': 'true'
+      }
+    });
+
+  } catch (err) {
+    return jsonError('Peek failed: ' + (err.message || String(err)), 500);
+  }
+}
+
 // ─── File Download: GET /file/{key} ─────────────────────────────────────────
 async function handleFileDownload(key) {
   var KV = getKV();
@@ -268,6 +311,12 @@ async function handleRequest(request) {
     return handleUpload(request);
   }
 
+  // Peek (read-only, no counter change): GET /peek/{key}
+  if (method === 'GET' && path.startsWith('/peek/')) {
+    var peekKey = path.substring(6); // Remove '/peek/'
+    if (peekKey) return handleFilePeek(peekKey);
+  }
+
   // File download: GET /file/{key}
   if (method === 'GET' && path.startsWith('/file/')) {
     var key = path.substring(6); // Remove '/file/'
@@ -297,7 +346,7 @@ async function handleRequest(request) {
       service: 'MojiMask Proxy v2',
       status: 'running',
       storage: kvName2 ? 'KV connected (' + kvName2 + ')' : 'KV NOT configured',
-      routes: ['POST /', 'GET /file/{key}', 'GET /download?url=...', 'GET /health']
+      routes: ['POST /', 'GET /peek/{key}', 'GET /file/{key}', 'GET /download?url=...', 'GET /health']
     });
   }
 

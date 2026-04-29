@@ -838,7 +838,6 @@ async function handleDecryption() {
         // ── View-Count Enforcement ──────────────────────────────────────────
         // The max-view limit is encoded in the emoji key itself (client-side).
         // We store a counter in localStorage keyed by the file key.
-        // This works regardless of CORS proxies.
         const storageKey = `mojimask_views_${keyData.key}`;
         const maxViews = keyData.maxViews; // 0 = unlimited
 
@@ -850,27 +849,68 @@ async function handleDecryption() {
                 throw new Error(`Access denied. This intelligence has been viewed ${maxViews} time(s) and has self-destructed.`);
             }
             
-            // Show remaining views before decrementing
             const remaining = maxViews - usedViews - 1;
             console.log(`View ${usedViews + 1} of ${maxViews}. ${remaining} remaining after this.`);
         }
         // ────────────────────────────────────────────────────────────────────
 
-        showLoading("Fetching Intelligence...");
-        
-        // Intelligence Retrieval
-        state.encryptedBase64 = await downloadData(keyData);
-        
-        // Step 10: AES Decryption
-        state.processedBase64 = decryptData(state.encryptedBase64, password);
-        
-        // Step 11: Render & Display
+        // ── STEP 1: PEEK — fetch encrypted data WITHOUT consuming a view ──────
+        // For provider 0 (Cloudflare KV) we call the read-only /peek/ endpoint.
+        // This returns the encrypted payload but does NOT decrement the download
+        // counter or trigger auto-delete — so a wrong password costs nothing.
+        // For providers 1-3 (external services), a plain GET doesn't decrement
+        // their server-side quota, so we download freely and only count locally
+        // after a confirmed successful decryption.
+        const CF_WORKER_BASE = 'https://fileio-proxy.codegenious-2k10.workers.dev';
+        let encryptedPayload;
+
+        if (keyData.provider === 0) {
+            showLoading("Fetching Intelligence...");
+            try {
+                const peekUrl = `${CF_WORKER_BASE}/peek/${keyData.key}`;
+                const peekResponse = await robustFetch(peekUrl, {}, 1, 12000);
+                encryptedPayload = await peekResponse.text();
+                console.log('✅ Peek succeeded (view not yet consumed).');
+            } catch (peekError) {
+                throw new Error(
+                    peekError.message.includes("not found") || peekError.message.includes("404")
+                        ? "Intelligence expired or self-destructed."
+                        : `Download failed: ${peekError.message}`
+                );
+            }
+        } else {
+            encryptedPayload = await downloadData(keyData);
+        }
+
+        // ── STEP 2: Verify password BEFORE consuming the view ────────────────
+        // decryptData() throws "Decryption failed. Incorrect password..." on a
+        // bad password — so a wrong attempt never reaches Step 3.
+        showLoading("Decrypting...");
+        state.processedBase64 = decryptData(encryptedPayload, password);
+
+        // ── STEP 3: Password correct — NOW officially consume the view ────────
+        if (keyData.provider === 0) {
+            showLoading("Confirming Access...");
+            try {
+                const consumeResponse = await robustFetch(
+                    `${CF_WORKER_BASE}/file/${keyData.key}`, {}, 1, 12000
+                );
+                await consumeResponse.text(); // response body not needed
+                console.log('✅ View consumed via /file/ endpoint.');
+            } catch (consumeError) {
+                // Non-fatal: image already decrypted; log and continue.
+                console.warn(`[Consume] Failed to register view: ${consumeError.message}`);
+            }
+        }
+
+        // ── STEP 4: Render & Display ──────────────────────────────────────────
+        state.encryptedBase64 = encryptedPayload;
         UI.decryptedImage.src = state.processedBase64;
         UI.receiverDisplay.classList.remove('hidden');
         
         hideLoading();
 
-        // ── Increment View Counter (success only) ──────────────────────────
+        // ── Increment local view counter (success only) ───────────────────────
         if (maxViews > 0) {
             const stored = JSON.parse(localStorage.getItem(storageKey) || '{}');
             const newCount = (stored.count || 0) + 1;
