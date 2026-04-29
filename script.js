@@ -233,98 +233,97 @@ async function robustFetch(url, options = {}, retries = 2, timeout = CONFIG.FETC
 }
 async function uploadData(encryptedBase64, maxViews = 1) {
     const blob = new Blob([encryptedBase64], { type: 'text/plain' });
-    
-    // ROUTE 0: Primary (file.io) via Priority Proxy Queue
-    // Proxies are tried in priority order: Cloudflare Worker first, then public CORS bridges.
-    const UPLOAD_PROXY_QUEUE = [
-        { name: 'Cloudflare Worker',  url: 'https://rapid-sun-3368.codegenious-2k10.workers.dev/', timeout: 10000 },
-        ...CONFIG.CORS_BRIDGES.map((bridge, i) => ({
-            name: `Public Bridge ${i + 1}`,
-            url: bridge,
-            timeout: 8000
-        }))
-    ];
 
-    {
-        let proxyAttempt = 0;
-        for (const proxy of UPLOAD_PROXY_QUEUE) {
-            proxyAttempt++;
-            try {
-                // Smart URL construction: if proxy doesn't have '?' or end in '/', add '?' for query-style forwarding
-                const separator = proxy.url.includes('?') ? '' : (proxy.url.endsWith('/') ? '' : '?');
-                const proxiedUrl = `${proxy.url}${separator}${encodeURIComponent(CONFIG.UPLOAD_ENDPOINT)}`;
-                console.log(`[Proxy ${proxyAttempt}/${UPLOAD_PROXY_QUEUE.length}] Trying ${proxy.name} for file.io upload (${maxViews} views)...`);
-
-                const primaryData = new FormData();
-                primaryData.append('file', blob, 'intel.enc');
-
-                if (maxViews > 0) {
-                    primaryData.append('maxDownloads', maxViews.toString());
-                    primaryData.append('autoDelete', 'true');
-                } else {
-                    primaryData.append('expires', CONFIG.EXPIRY || '1w');
-                }
-
-                const response = await robustFetch(proxiedUrl, {
-                    method: 'POST',
-                    body: primaryData
-                }, 0, proxy.timeout);
-
-                let res;
-                try {
-                    res = await response.json();
-                } catch (jsonErr) {
-                    console.warn(`[${proxy.name}] Non-JSON response received. Trying next proxy...`);
-                    continue;
-                }
-
-                console.log(`[${proxy.name}] file.io response:`, res);
-                if (res && res.success) {
-                    if (proxyAttempt > 1) console.log(`✅ Upload succeeded via fallback proxy: ${proxy.name}`);
-                    return keyToEmojis(res.key, 0, parseInt(maxViews));
-                }
-
-                // If specialized worker failed with path, try it with query param as last resort for that proxy
-                if (proxy.name === 'Cloudflare Worker' && !proxy.url.includes('?') && !proxiedUrl.includes('?url=')) {
-                   console.log(`[${proxy.name}] Path-style failed. Attempting query-style fallback...`);
-                   const queryUrl = `${proxy.url}${proxy.url.endsWith('/') ? '' : '/'}?url=${encodeURIComponent(CONFIG.UPLOAD_ENDPOINT)}`;
-                   const qResponse = await robustFetch(queryUrl, { method: 'POST', body: primaryData }, 0, proxy.timeout);
-                   const qRes = await qResponse.json();
-                   if (qRes && qRes.success) return keyToEmojis(qRes.key, 0, parseInt(maxViews));
-                }
-
-                console.warn(`[${proxy.name}] file.io returned success=false or could not be parsed. Trying next proxy...`);
-            } catch (err) {
-                console.warn(`[${proxy.name}] Failed: ${err.message}. ${proxyAttempt < UPLOAD_PROXY_QUEUE.length ? 'Trying next proxy...' : 'All proxies exhausted.'}`);
-            }
+    // Helper: build the FormData payload for file.io-compatible endpoints
+    function buildFileIoFormData() {
+        const fd = new FormData();
+        fd.append('file', blob, 'intel.enc');
+        if (maxViews > 0) {
+            fd.append('maxDownloads', maxViews.toString());
+            fd.append('autoDelete', 'true');
+        } else {
+            fd.append('expires', CONFIG.EXPIRY || '1w');
         }
-        console.warn("All file.io proxy routes failed. Engaging alternative providers...");
+        return fd;
     }
 
-    // ROUTE 1: Fallback A (transfer.sh)
+    // ── ROUTE 0-A: Cloudflare Worker (direct POST, worker forwards to file.io internally) ──
+    // The worker already knows the target; do NOT append the file.io URL to its path.
+    const CF_WORKER_URL = 'https://fileio-proxy.codegenious-2k10.workers.dev/';
     try {
-        console.log("Attempting Fallback Route 1 (transfer.sh)...");
+        console.log(`[Cloudflare Worker] Uploading via primary proxy (${maxViews} views)...`);
+        const cfResponse = await robustFetch(CF_WORKER_URL, {
+            method: 'POST',
+            body: buildFileIoFormData()
+        }, 1, 12000);
+
+        let cfRes;
+        try { cfRes = await cfResponse.json(); } catch (_) { cfRes = null; }
+
+        if (cfRes && cfRes.success && cfRes.key) {
+            console.log('✅ Upload succeeded via Cloudflare Worker.');
+            return keyToEmojis(cfRes.key, 0, parseInt(maxViews));
+        }
+        console.warn('[Cloudflare Worker] Returned success=false or bad JSON. Trying CORS bridges...');
+    } catch (err) {
+        console.warn(`[Cloudflare Worker] Failed: ${err.message}. Trying CORS bridges...`);
+    }
+
+    // ── ROUTE 0-B: Public CORS bridges → file.io ──────────────────────────────────────────
+    // These bridges act as server-side relay: they accept a target URL and forward the
+    // request, so CORS is not an issue. The file.io URL is passed as a query param.
+    let bridgeAttempt = 0;
+    for (const bridge of CONFIG.CORS_BRIDGES) {
+        bridgeAttempt++;
+        try {
+            const proxiedUrl = `${bridge}${encodeURIComponent(CONFIG.UPLOAD_ENDPOINT)}`;
+            console.log(`[CORS Bridge ${bridgeAttempt}/${CONFIG.CORS_BRIDGES.length}] Trying: ${bridge}`);
+
+            const response = await robustFetch(proxiedUrl, {
+                method: 'POST',
+                body: buildFileIoFormData()
+            }, 0, 8000);
+
+            let res;
+            try { res = await response.json(); } catch (_) {
+                console.warn(`[CORS Bridge ${bridgeAttempt}] Non-JSON response. Trying next...`);
+                continue;
+            }
+
+            if (res && res.success && res.key) {
+                console.log(`✅ Upload succeeded via CORS Bridge ${bridgeAttempt}.`);
+                return keyToEmojis(res.key, 0, parseInt(maxViews));
+            }
+            console.warn(`[CORS Bridge ${bridgeAttempt}] success=false or missing key. Trying next...`);
+        } catch (err) {
+            console.warn(`[CORS Bridge ${bridgeAttempt}] Failed: ${err.message}.${bridgeAttempt < CONFIG.CORS_BRIDGES.length ? ' Trying next...' : ' All bridges exhausted.'}`);
+        }
+    }
+    console.warn('All file.io routes failed. Engaging alternative providers...');
+
+    // ── ROUTE 1: Fallback A (transfer.sh) ──────────────────────────────────────────────────
+    try {
+        console.log('Attempting Fallback Route 1 (transfer.sh)...');
         const headers = { 'Max-Days': '7' };
         if (maxViews > 0) headers['Max-Downloads'] = maxViews.toString();
 
-        const responseB = await robustFetch(`${CONFIG.UPLOAD_ENDPOINT_C}intel.enc`, { 
+        const responseB = await robustFetch(`${CONFIG.UPLOAD_ENDPOINT_C}intel.enc`, {
             method: 'PUT',
             body: blob,
             headers: headers
         }, 1, 8000);
         const url = await responseB.text();
         const parts = url.trim().split('/');
-        const id = parts[parts.length - 2]; 
+        const id = parts[parts.length - 2];
         if (id) return keyToEmojis(id, 1, parseInt(maxViews));
-    } catch (e) { console.warn("Fallback Route 1 (transfer.sh) Failed:", e.message); }
+    } catch (e) { console.warn('Fallback Route 1 (transfer.sh) Failed:', e.message); }
 
-    // ROUTE 2: Fallback B (0x0.st) — enforces server-side max-days (no download limit, but reliable)
-    // Still useful as it does store the file. View-limit enforcement falls back to client-side localStorage.
+    // ── ROUTE 2: Fallback B (0x0.st) ───────────────────────────────────────────────────────
+    // No server-side download limit; view enforcement falls back to client-side localStorage.
     try {
-        console.log("Attempting Fallback Route 2 (0x0.st)...");
+        console.log('Attempting Fallback Route 2 (0x0.st)...');
         const zeroXData = new FormData();
         zeroXData.append('file', blob, 'intel.enc');
-        // 0x0.st supports secret parameter for unlisted files
         zeroXData.append('secret', '');
 
         const responseD = await robustFetch(CONFIG.UPLOAD_ENDPOINT_D, {
@@ -334,21 +333,17 @@ async function uploadData(encryptedBase64, maxViews = 1) {
         const urlD = await responseD.text();
         const trimmedUrl = urlD.trim();
         if (trimmedUrl.startsWith('http')) {
-            // 0x0.st returns raw URL e.g. https://0x0.st/XYZ.enc
-            // Encode the full URL as the key (provider 2 handles raw URL keys)
             const key0x0 = encodeURIComponent(trimmedUrl);
-            // Use provider=3 to signal 0x0.st, client-side view limit enforcement
             if (maxViews > 0) {
-                notify(`⚠️ Primary providers unreachable. Upload succeeded via fallback. View limit (${maxViews}) is enforced locally on this device.`, "info");
+                notify(`⚠️ Primary providers unreachable. Upload succeeded via fallback. View limit (${maxViews}) is enforced locally on this device.`, 'info');
             }
             return keyToEmojis(key0x0, 3, parseInt(maxViews));
         }
-    } catch (e) { console.warn("Fallback Route 2 (0x0.st) Failed:", e.message); }
+    } catch (e) { console.warn('Fallback Route 2 (0x0.st) Failed:', e.message); }
 
-    // ROUTE 3: Deep Fallback (tmpfiles.org) — no server-side download limit
-    // For capped view limits: still upload, but enforce limit via client-side localStorage only.
+    // ── ROUTE 3: Deep Fallback (tmpfiles.org) ──────────────────────────────────────────────
     try {
-        console.log("Attempting Deep Fallback (tmpfiles.org)...");
+        console.log('Attempting Deep Fallback (tmpfiles.org)...');
         const fallBackData = new FormData();
         fallBackData.append('file', blob, 'intel.enc');
 
@@ -360,13 +355,13 @@ async function uploadData(encryptedBase64, maxViews = 1) {
         const id = resC.data.url.split('/').slice(-2, -1)[0];
         if (id) {
             if (maxViews > 0) {
-                notify(`⚠️ Primary providers unreachable. Upload succeeded via fallback. View limit (${maxViews}) is enforced locally on this device.`, "info");
+                notify(`⚠️ Primary providers unreachable. Upload succeeded via fallback. View limit (${maxViews}) is enforced locally on this device.`, 'info');
             }
-            return keyToEmojis(id, 2, parseInt(maxViews)); // pass actual maxViews so client-side enforcement still works
+            return keyToEmojis(id, 2, parseInt(maxViews));
         }
-    } catch (e) { console.warn("Deep Fallback (tmpfiles.org) Failed:", e.message); }
+    } catch (e) { console.warn('Deep Fallback (tmpfiles.org) Failed:', e.message); }
 
-    throw new Error("ALL DATA ROUTES BLOCKED. Check your network/AdBlock settings and try again.");
+    throw new Error('ALL DATA ROUTES BLOCKED. Check your network/AdBlock settings and try again.');
 }
 
 
@@ -389,11 +384,33 @@ async function uploadData(encryptedBase64, maxViews = 1) {
  */
 async function downloadData(keyData) {
     const { key, provider, maxViews } = keyData;
-    let url = `https://file.io/${key}`;
+    const CF_WORKER_BASE = 'https://fileio-proxy.codegenious-2k10.workers.dev';
 
+    // ── Provider 0: Our Cloudflare Worker KV Storage ─────────────────────────
+    // Data is stored directly in our Worker's KV. No CORS bridge needed.
+    if (provider === 0) {
+        try {
+            showLoading("Connecting to Secure Vault...");
+            const url = `${CF_WORKER_BASE}/file/${key}`;
+            const response = await robustFetch(url, {}, 1, 12000);
+            console.log('✅ Download succeeded via Cloudflare Worker KV.');
+            return await response.text();
+        } catch (error) {
+            console.warn(`[Worker KV Download] Failed: ${error.message}`);
+            throw new Error(
+                error.message.includes("not found") || error.message.includes("404")
+                    ? "Intelligence expired or self-destructed."
+                    : `Download failed: ${error.message}`
+            );
+        }
+    }
+
+    // ── Providers 1-3: External services (transfer.sh, tmpfiles, 0x0.st) ────
+    let url;
     if (provider === 1) url = `${CONFIG.UPLOAD_ENDPOINT_C}${key}/intel.enc`;
-    if (provider === 2) url = `https://tmpfiles.org/dl/${key}/intel.enc`;
-    if (provider === 3) url = decodeURIComponent(key); // 0x0.st: key is full encoded URL
+    else if (provider === 2) url = `https://tmpfiles.org/dl/${key}/intel.enc`;
+    else if (provider === 3) url = decodeURIComponent(key); // 0x0.st: key is full encoded URL
+    else url = `https://file.io/${key}`; // Legacy fallback
 
     // Cache-buster so proxies don't serve a stale cached copy
     url += `?cb=${Date.now()}`;
@@ -401,12 +418,9 @@ async function downloadData(keyData) {
     console.log(`Vault path: ${url}`);
 
     // Determine whether this provider tracks server-side download counts.
-    // Providers 0 (file.io) and 1 (transfer.sh) enforce limits server-side.
-    // Providers 2 (tmpfiles.org) and 3 (0x0.st) enforce via client-side localStorage only.
-    const hasDownloadQuota = (provider === 0 || provider === 1) && maxViews > 0;
+    const hasDownloadQuota = (provider === 1) && maxViews > 0;
 
     if (!hasDownloadQuota) {
-        // ── No server-side quota: tmpfiles / 0x0.st / unlimited keys ────────
         // Safe to attempt direct (no quota to waste), fall back to bridges.
         try {
             showLoading("Connecting to Vault...");
@@ -417,16 +431,23 @@ async function downloadData(keyData) {
             console.warn("Direct path blocked. Initializing Bridge Relay...");
         }
     } else {
-        // ── Limited key: skip direct GET to preserve the download quota ─────
-        // Each real download from the server = 1 view used against maxDownloads.
-        // Going straight to the bridge ensures exactly 1 slot is consumed per view.
-        console.log(`Limited key (${maxViews} max views) — routing directly through relay to preserve quota.`);
+        console.log(`Limited key (${maxViews} max views) — routing through relay.`);
         showLoading("Opening Secure Relay...");
     }
 
-    // ── Bridge Relay ────────────────────────────────────────────────────────
-    // The bridge server makes the request to file.io on our behalf (server-to-server),
-    // so CORS is not an issue and exactly 1 download is consumed per bridge attempt.
+    // ── Bridge Relay: Cloudflare Worker proxy ────────────────────────────────
+    const CF_DOWNLOAD_URL = `${CF_WORKER_BASE}/download`;
+    try {
+        showLoading("Connecting via Secure Relay...");
+        const workerUrl = `${CF_DOWNLOAD_URL}?url=${encodeURIComponent(url)}`;
+        const workerResponse = await robustFetch(workerUrl, {}, 0, 12000);
+        console.log('✅ Download succeeded via Cloudflare Worker relay.');
+        return await workerResponse.text();
+    } catch (e) {
+        console.warn(`[Worker Download Proxy] Failed: ${e.message}. Trying public bridges...`);
+    }
+
+    // ── Bridge Relay: Public CORS Bridges (last resort) ─────────────────────
     let lastError = null;
     let bridgeCount = 1;
     for (const bridge of CONFIG.CORS_BRIDGES) {
@@ -1020,14 +1041,16 @@ document.addEventListener('DOMContentLoaded', () => {
         UI.maxViewsCustom.addEventListener('input', () => {
             let val = parseInt(UI.maxViewsCustom.value);
             
-            // Allow 0 for unlimited, otherwise fallback to 1
-            if (isNaN(val) || val < 0) val = 1;
-            if (val > 1000) val = 1000;
+            // Fallback to 1 if invalid
+            if (isNaN(val) || val < 1) val = 1;
+            
+            if (val > 1000) {
+                val = 1000;
+                UI.maxViewsCustom.value = 1000;
+                notify("View limit cannot be set more than 1000", "info");
+            }
             
             UI.maxViews.value = val;
-            if (val === 0) {
-                notify("Self-destruct set to Unlimited", "info");
-            }
         });
     }
 
