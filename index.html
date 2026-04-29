@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MojiMask | Phantom Image Gallery</title>
+    <title>MojiMask | Secure Image Encrypter</title>
     <meta name="description" content="Securely share images with end-to-end encryption. Encrypt your photos into emojis and share them with a self-destructing link.">
     
     <!-- SEO Meta Tags -->
-    <meta property="og:title" content="MojiMask - Phantom Gallery">
+    <meta property="og:title" content="MojiMask - Secure Gallery">
     <meta property="og:description" content="Secure, ephemeral, and encrypted image sharing.">
     <meta property="og:type" content="website">
     
@@ -25,7 +25,7 @@
     
     <main class="app-container" id="main-app">
         <header class="hero-section">
-            <h1 class="glitch-text" data-text="EmojiMask">EmojiMask</h1>
+            <h1 class="glitch-text" data-text="MojiMask">MojiMask</h1>
             <p class="subtitle">Image To Emoji Encryption Tool </p>
         </header>
 
@@ -54,7 +54,7 @@
                         <input type="file" id="image-picker" accept="image/*, .heic, .heif, .avif">
                         <div class="drop-zone-content" id="drop-zone-text">
                             <span class="upload-icon">📸</span>
-                            <p>Upload or Drag Image</p>
+                            <p>Upload, Drag, or Paste Image</p>
                         </div>
                         <div id="image-preview-overlay" class="preview-overlay hidden">
                             <img id="preview-img" src="" alt="Capture Preview">
@@ -77,9 +77,9 @@
                     <label for="max-views">Max Views (Self-Destruct)</label>
                     <div class="views-hybrid-input">
                         <select id="max-views-preset" class="custom-select">
-                            <option value="1">1 View (Phantom)</option>
-                            <option value="5">5 Views (Team)</option>
-                            <option value="10">10 Views (Public)</option>
+                            <option value="1">1 View </option>
+                            <option value="5">5 Views </option>
+                            <option value="10">10 Views </option>
                             <option value="custom">Custom amount...</option>
                         </select>
                         <input type="number" id="max-views-custom" class="custom-num-input hidden" min="1" max="1000" placeholder="Qty">
@@ -166,7 +166,7 @@
                 <div class="guide-card">
                     <div class="card-icon">🌑</div>
                     <h3>Zero-Knowledge Architecture</h3>
-                    <p>MojiMask operates on a <strong>Zero-Knowledge</strong> principle. Neither our servers nor the cloud providers ever see your raw image or your password. The "Phantom Key" (emojis) is a localized encoding of a temporary resource ID, meaning the link between your data and the server is obfuscated.</p>
+                    <p>MojiMask operates on a <strong>Zero-Knowledge</strong> principle. Neither our servers nor the cloud providers ever see your raw image or your password. The "Emoji Key" (emojis) is a localized encoding of a temporary resource ID, meaning the link between your data and the server is obfuscated.</p>
                 </div>
                 <div class="guide-card">
                     <div class="card-icon">💥</div>
@@ -186,7 +186,7 @@
                     <strong>1. Local Optimization:</strong> Images are shrunk and compressed using smart JPEG algorithms to ensure quick transmission and immediate destruction.
                 </div>
                 <div class="detail-item">
-                    <strong>2. Phantom Key Mapping:</strong> The emojis you share are a custom character-map of the encrypted resource ID. This prevents simple text-based filtering by surveillance systems.
+                    <strong>2. Emoji Key Mapping:</strong> The emojis you share are a custom character-map of the encrypted resource ID. This prevents simple text-based filtering by surveillance systems.
                 </div>
                 <div class="detail-item">
                     <strong>3. Session Guard:</strong> Each session tracks extracted signatures to prevent reloading or double-accessing the same intelligence, enforcing the "One View" rule.
@@ -205,7 +205,7 @@
                     <span class="step-num">02</span>
                     <div class="step-content">
                         <h4>Masked Sharing</h4>
-                        <p>Copy the Phantom Key emojis. Share them via any communication channel securely.</p>
+                        <p>Copy the Emoji Key emojis. Share them via any communication channel securely.</p>
                     </div>
                 </div>
                 <div class="step">

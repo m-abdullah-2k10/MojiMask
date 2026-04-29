@@ -5,9 +5,9 @@
 */
 
 const CONFIG = {
-    MAX_IMAGE_DIMENSION: 1200, // Balanced for higher quality
-    MAX_IMAGE_SIZE: 0.5 * 1024 * 1024, // Image itself limited to 500KB
-    MAX_ENCRYPTED_SIZE: 1.0 * 1024 * 1024, // Final blob target ~1MB
+    MAX_IMAGE_DIMENSION: 4096, // Safety cap to prevent canvas memory crash
+    MAX_IMAGE_SIZE: 1.0 * 1024 * 1024, // Image itself limited to 1MB
+    MAX_ENCRYPTED_SIZE: 1.5 * 1024 * 1024, // Final blob target ~1.5MB
     JPEG_QUALITY: 1.0, // Maximum quality start
     UPLOAD_ENDPOINT: 'https://file.io/',
     UPLOAD_ENDPOINT_B: 'https://tmpfiles.org/api/v1/upload',
@@ -565,51 +565,54 @@ async function processImage(file) {
             const img = new Image();
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                let width = img.width;
-                let height = img.height;
+                let w = img.width;
+                let h = img.height;
 
-                // Resize to max dimensions
-                if (width > height) {
-                    if (width > CONFIG.MAX_IMAGE_DIMENSION) {
-                        height *= CONFIG.MAX_IMAGE_DIMENSION / width;
-                        width = CONFIG.MAX_IMAGE_DIMENSION;
-                    }
-                } else {
-                    if (height > CONFIG.MAX_IMAGE_DIMENSION) {
-                        width *= CONFIG.MAX_IMAGE_DIMENSION / height;
-                        height = CONFIG.MAX_IMAGE_DIMENSION;
-                    }
+                // Initial safety cap to prevent browser canvas crash on extreme images
+                const maxSafeDim = CONFIG.MAX_IMAGE_DIMENSION;
+                if (Math.max(w, h) > maxSafeDim) {
+                    const ratio = maxSafeDim / Math.max(w, h);
+                    w = Math.floor(w * ratio);
+                    h = Math.floor(h * ratio);
                 }
 
-                canvas.width = width;
-                canvas.height = height;
+                canvas.width = w;
+                canvas.height = h;
                 const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
+                ctx.drawImage(img, 0, 0, w, h);
 
-                // Optimized Binary Search for maximum quality under 500KB
-                let low = 0.1;
-                let high = 1.0;
                 let quality = 0.95;
                 let base64 = canvas.toDataURL('image/jpeg', quality);
                 
-                // If initial quality is already okay, skip loop
+                // First optimization pass: Binary Search on JPEG Quality (Minimum 0.6)
                 if (base64.length * 0.75 > CONFIG.MAX_IMAGE_SIZE) {
-                    // Only run binary search if needed (max 5 iterations for precision)
+                    let lowQ = 0.6;
+                    let highQ = 0.95;
                     for (let i = 0; i < 5; i++) {
-                        quality = (low + high) / 2;
-                        base64 = canvas.toDataURL('image/jpeg', quality);
-                        if (base64.length * 0.75 > CONFIG.MAX_IMAGE_SIZE) {
-                            high = quality;
+                        let midQ = (lowQ + highQ) / 2;
+                        let testBase64 = canvas.toDataURL('image/jpeg', midQ);
+                        if (testBase64.length * 0.75 > CONFIG.MAX_IMAGE_SIZE) {
+                            highQ = midQ;
                         } else {
-                            low = quality;
+                            lowQ = midQ;
+                            base64 = testBase64;
                         }
                     }
-                    // Final pass at the 'low' value to ensure we are under the limit
-                    quality = low;
+                    quality = lowQ;
                     base64 = canvas.toDataURL('image/jpeg', quality);
                 }
                 
-                console.log(`Optimization complete: Quality=${quality.toFixed(2)}, Image Size=${(base64.length * 0.75 / 1024).toFixed(2)}KB`);
+                // Second optimization pass: Iterative Dimension Reduction if still too large
+                while (base64.length * 0.75 > CONFIG.MAX_IMAGE_SIZE && w > 500) {
+                    w = Math.floor(w * 0.85); // Reduce resolution by 15%
+                    h = Math.floor(h * 0.85);
+                    canvas.width = w;
+                    canvas.height = h;
+                    ctx.drawImage(img, 0, 0, w, h);
+                    base64 = canvas.toDataURL('image/jpeg', quality);
+                }
+
+                console.log(`Optimization complete: Quality=${quality.toFixed(2)}, Dimensions=${w}x${h}, Image Size=${(base64.length * 0.75 / 1024).toFixed(2)}KB`);
                 resolve(base64);
             };
             img.onerror = reject;
@@ -791,7 +794,7 @@ async function handleEncryption() {
         hideLoading();
         notify("Encryption completed.", "success");
         
-        console.log("Intelligence Phase Complete. Phantom Key:", state.emojiKey);
+        console.log("Intelligence Phase Complete. Emoji Key:", state.emojiKey);
 
     } catch (error) {
         console.error("Encryption Phase Error:", error);
@@ -811,7 +814,7 @@ async function handleDecryption() {
     const password = UI.decryptPassword.value;
 
     if (!emojiString) {
-        notify("Phantom Key missing. Please provide the emojis.", "error");
+        notify("Emoji Key missing. Please provide the emojis.", "error");
         shake(UI.emojiInput);
         return;
     }
@@ -823,13 +826,13 @@ async function handleDecryption() {
     }
 
     try {
-        showLoading("Decoding Phantom Key...");
+        showLoading("Decoding Emoji Key...");
         
         // Step 8: Emoji-to-Key Decoding
         const keyData = emojisToKey(emojiString);
         
         if (!keyData.key) {
-            throw new Error("Invalid Phantom Key format.");
+            throw new Error("Invalid Emoji Key format.");
         }
 
         // ── View-Count Enforcement ──────────────────────────────────────────
@@ -948,7 +951,7 @@ function clearImageSelection() {
     state.selectedFile = null;
     UI.imagePicker.value = '';
     const dropZoneLabel = UI.dropZoneText.querySelector('p');
-    dropZoneLabel.textContent = 'Upload or Drag Image';
+    dropZoneLabel.textContent = 'Upload, Drag, or Paste Image';
     UI.dropZone.style.borderColor = 'var(--border-color)';
     UI.btnClearImage.classList.remove('visible');
     UI.btnPreviewImage.classList.remove('visible');
@@ -986,6 +989,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     UI.dropZone.addEventListener('drop', (e) => {
         handleFileSelect(e);
+    });
+
+    // 4.1 Paste Image
+    document.addEventListener('paste', (e) => {
+        if (state.currentMode !== 'encrypt') return;
+        
+        const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
+        if (!items) return;
+
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image/') === 0) {
+                const file = items[i].getAsFile();
+                if (file) {
+                    e.preventDefault();
+                    // Pass a synthetic event object that handleFileSelect expects
+                    handleFileSelect({ target: { files: [file] } });
+                }
+                break;
+            }
+        }
     });
 
     // 5. Action Buttons
@@ -1102,7 +1125,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function onCopySuccess() {
-        notify("Phantom Key copied to clipboard.", "success");
+        notify("Emoji Key copied to clipboard.", "success");
         const originalText = UI.btnCopyEmojis.textContent;
         UI.btnCopyEmojis.textContent = '✅';
         UI.btnCopyEmojis.style.boxShadow = '0 0 15px var(--primary-glow)';
