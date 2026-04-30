@@ -11,7 +11,6 @@ const CONFIG = {
     JPEG_QUALITY: 1.0, // Maximum quality start
     UPLOAD_ENDPOINT: 'https://file.io/',
     UPLOAD_ENDPOINT_B: 'https://tmpfiles.org/api/v1/upload',
-    UPLOAD_ENDPOINT_C: 'https://transfer.sh/',
     UPLOAD_ENDPOINT_D: 'https://0x0.st/',
     EXPIRY: '1w',
     FETCH_TIMEOUT: 12000, // 12s timeout for network operations
@@ -360,24 +359,7 @@ async function uploadData(encryptedBase64, maxViews = 1) {
     }
     console.warn('All file.io routes failed. Engaging alternative providers...');
 
-    // ── ROUTE 1: Fallback A (transfer.sh) ──────────────────────────────────────────────────
-    try {
-        console.log('Attempting Fallback Route 1 (transfer.sh)...');
-        const headers = { 'Max-Days': '7' };
-        if (maxViews > 0) headers['Max-Downloads'] = maxViews.toString();
-
-        const responseB = await robustFetch(`${CONFIG.UPLOAD_ENDPOINT_C}intel.enc`, {
-            method: 'PUT',
-            body: blob,
-            headers: headers
-        }, 1, 8000);
-        const url = await responseB.text();
-        const parts = url.trim().split('/');
-        const id = parts[parts.length - 2];
-        if (id) return keyToEmojis(id, 1, parseInt(maxViews));
-    } catch (e) { console.warn('Fallback Route 1 (transfer.sh) Failed:', e.message); }
-
-    // ── ROUTE 2: Fallback B (0x0.st) ───────────────────────────────────────────────────────
+    // ── ROUTE 1: Fallback A (0x0.st) ───────────────────────────────────────────────────────
     // No server-side download limit; view enforcement falls back to client-side localStorage.
     try {
         console.log('Attempting Fallback Route 2 (0x0.st)...');
@@ -464,9 +446,9 @@ async function downloadData(keyData) {
         }
     }
 
-    // ── Providers 1-3: External services (transfer.sh, tmpfiles, 0x0.st) ────
+    // ── Providers 1-3: External services (legacy transfer.sh, tmpfiles, 0x0.st) ────
     let url;
-    if (provider === 1) url = `${CONFIG.UPLOAD_ENDPOINT_C}${key}/intel.enc`;
+    if (provider === 1) url = `https://transfer.sh/${key}/intel.enc`; // Legacy support (though dead)
     else if (provider === 2) url = `https://tmpfiles.org/dl/${key}/intel.enc`;
     else if (provider === 3) url = decodeURIComponent(key); // 0x0.st: key is full encoded URL
     else url = `https://file.io/${key}`; // Legacy fallback
@@ -909,9 +891,11 @@ async function handleEncryption() {
         
         console.log("Intelligence Phase Complete.");
 
-        // Clean up memory
+        // Clean up memory and sensitive inputs
         state.processedBase64 = null;
         state.encryptedBase64 = null;
+        UI.encryptPassword.value = '';
+        UI.btnClearEncryptPass.classList.remove('visible');
 
     } catch (error) {
         console.error("Encryption Phase Error:", error);
@@ -1045,9 +1029,11 @@ async function handleDecryption() {
         
         console.log("Intelligence successfully restored.");
 
-        // Clean up memory
+        // Clean up memory and sensitive inputs
         state.processedBase64 = null;
         state.encryptedBase64 = null;
+        UI.decryptPassword.value = '';
+        UI.btnClearDecryptPass.classList.remove('visible');
 
     } catch (error) {
         console.error("Decryption Phase Error:", error);

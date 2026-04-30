@@ -34,28 +34,12 @@ var ALLOWED_DOWNLOAD_HOSTS = [
 // ─── KV Binding Detection ───────────────────────────────────────────────────
 // Try multiple common binding names in case the user named it differently
 function getKV() {
-  if (typeof STORE !== 'undefined' && STORE !== null) return STORE;
-  if (typeof store !== 'undefined' && store !== null) return store;
-  if (typeof MOJIMASK_STORE !== 'undefined' && MOJIMASK_STORE !== null) return MOJIMASK_STORE;
   if (typeof Mojimask_store !== 'undefined' && Mojimask_store !== null) return Mojimask_store;
-  if (typeof KV !== 'undefined' && KV !== null) return KV;
-  if (typeof kv !== 'undefined' && kv !== null) return kv;
-  if (typeof MY_KV !== 'undefined' && MY_KV !== null) return MY_KV;
-  if (typeof DATA !== 'undefined' && DATA !== null) return DATA;
-  if (typeof MOJIMASK !== 'undefined' && MOJIMASK !== null) return MOJIMASK;
   return null;
 }
 
 function getKVName() {
-  if (typeof STORE !== 'undefined' && STORE !== null) return 'STORE';
-  if (typeof store !== 'undefined' && store !== null) return 'store';
-  if (typeof MOJIMASK_STORE !== 'undefined' && MOJIMASK_STORE !== null) return 'MOJIMASK_STORE';
   if (typeof Mojimask_store !== 'undefined' && Mojimask_store !== null) return 'Mojimask_store';
-  if (typeof KV !== 'undefined' && KV !== null) return 'KV';
-  if (typeof kv !== 'undefined' && kv !== null) return 'kv';
-  if (typeof MY_KV !== 'undefined' && MY_KV !== null) return 'MY_KV';
-  if (typeof DATA !== 'undefined' && DATA !== null) return 'DATA';
-  if (typeof MOJIMASK !== 'undefined' && MOJIMASK !== null) return 'MOJIMASK';
   return null;
 }
 
@@ -109,11 +93,14 @@ function jsonOk(data, status) {
 function generateKey() {
   // Generate a short, URL-safe key similar to file.io's format
   var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  var arr = new Uint8Array(8);
-  crypto.getRandomValues(arr);
+  var arr = new Uint8Array(1);
   var key = '';
-  for (var i = 0; i < arr.length; i++) {
-    key += chars[arr[i] % chars.length];
+  // Rejection sampling prevents modulo bias (62 chars, 248 is largest multiple <= 255)
+  while (key.length < 8) {
+    crypto.getRandomValues(arr);
+    if (arr[0] < 248) {
+      key += chars[arr[0] % 62];
+    }
   }
   return key;
 }
@@ -144,9 +131,8 @@ async function handleUpload(request) {
     var key = generateKey();
 
     // Ensure key doesn't already exist (extremely unlikely but safe)
-    var existing = await KV.get(key);
-    if (existing !== null) {
-      key = generateKey() + generateKey().substring(0, 4);
+    while (await KV.get(key) !== null) {
+      key = generateKey();
     }
 
     // Store in KV with expiry and metadata
