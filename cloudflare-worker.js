@@ -18,7 +18,13 @@
  *   GET   /health        → Health check
  */
 
-var ALLOWED_ORIGIN = '*';
+// ─── CORS Configuration ─────────────────────────────────────────────────────
+// Add your production domain(s) here. While the list is empty, all origins are
+// allowed so the tool keeps working during development / local file:// usage.
+var ALLOWED_ORIGINS = [
+  // 'https://yourdomain.com',
+];
+
 var EXPIRY_SECONDS = 604800; // 7 days
 
 var ALLOWED_DOWNLOAD_HOSTS = [
@@ -53,10 +59,30 @@ function getKVName() {
   return null;
 }
 
-// ─── CORS Headers ───────────────────────────────────────────────────────────
-function corsHeaders() {
+// ─── CORS Helpers ───────────────────────────────────────────────────────────
+/**
+ * Returns the origin to echo back, or null if the request should be rejected.
+ * - 'null' origin  → file:// protocol (local development)
+ * - localhost/127.x → development servers
+ * - ALLOWED_ORIGINS → production whitelist (when configured)
+ * - If ALLOWED_ORIGINS is empty, all origins are permitted (dev mode).
+ */
+function resolveOrigin(request) {
+  var origin = request.headers.get('Origin');
+  if (!origin) return '*';                 // Same-origin or non-browser client
+  if (origin === 'null') return 'null';    // file:// protocol
+  if (origin.match(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/)) return origin;
+  if (ALLOWED_ORIGINS.length === 0) return origin;  // No whitelist → allow all
+  for (var i = 0; i < ALLOWED_ORIGINS.length; i++) {
+    if (origin === ALLOWED_ORIGINS[i]) return origin;
+  }
+  return null; // Rejected
+}
+
+function corsHeaders(request) {
+  var origin = resolveOrigin(request);
   return {
-    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+    'Access-Control-Allow-Origin': origin || 'null',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': '*',
     'Access-Control-Max-Age': '86400'
@@ -64,17 +90,19 @@ function corsHeaders() {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+// NOTE: CORS headers are added centrally by handleRequest(), so helpers
+// only need to set Content-Type.
 function jsonError(message, status) {
   return new Response(JSON.stringify({ success: false, error: message }), {
     status: status,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': ALLOWED_ORIGIN }
+    headers: { 'Content-Type': 'application/json' }
   });
 }
 
 function jsonOk(data, status) {
   return new Response(JSON.stringify(data), {
     status: status || 200,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': ALLOWED_ORIGIN }
+    headers: { 'Content-Type': 'application/json' }
   });
 }
 
@@ -185,7 +213,6 @@ async function handleFilePeek(key) {
       status: 200,
       headers: {
         'Content-Type': 'text/plain',
-        'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
         'X-Downloads': String(currentDl),
         'X-Max-Downloads': String(maxDl),
         'X-Peek': 'true'
@@ -246,7 +273,6 @@ async function handleFileDownload(key) {
       status: 200,
       headers: {
         'Content-Type': 'text/plain',
-        'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
         'X-Downloads': String(newCount),
         'X-Max-Downloads': String(maxDl)
       }
@@ -282,7 +308,6 @@ async function handleProxyDownload(request) {
   try {
     var upstream = await fetch(targetUrl, { method: 'GET', redirect: 'follow' });
     var headers = new Headers();
-    headers.set('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
     var ct = upstream.headers.get('Content-Type');
     if (ct) headers.set('Content-Type', ct);
     return new Response(upstream.body, { status: upstream.status, headers: headers });
@@ -303,9 +328,24 @@ async function handleRequest(request) {
 
   // CORS Preflight
   if (method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders() });
+    return new Response(null, { status: 204, headers: corsHeaders(request) });
   }
 
+  // Route to the appropriate handler
+  var response = await routeRequest(request, method, path);
+
+  // Centrally inject CORS header into every response
+  var origin = resolveOrigin(request);
+  var newHeaders = new Headers(response.headers);
+  newHeaders.set('Access-Control-Allow-Origin', origin || 'null');
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: newHeaders
+  });
+}
+
+async function routeRequest(request, method, path) {
   // Upload: POST /
   if (method === 'POST' && (path === '/' || path === '')) {
     return handleUpload(request);
@@ -313,13 +353,13 @@ async function handleRequest(request) {
 
   // Peek (read-only, no counter change): GET /peek/{key}
   if (method === 'GET' && path.startsWith('/peek/')) {
-    var peekKey = path.substring(6); // Remove '/peek/'
+    var peekKey = path.substring(6);
     if (peekKey) return handleFilePeek(peekKey);
   }
 
   // File download: GET /file/{key}
   if (method === 'GET' && path.startsWith('/file/')) {
-    var key = path.substring(6); // Remove '/file/'
+    var key = path.substring(6);
     if (key) return handleFileDownload(key);
   }
 
@@ -333,8 +373,9 @@ async function handleRequest(request) {
     var kvName = getKVName();
     return jsonOk({
       status: 'ok',
-      service: 'MojiMask Proxy v2 (KV Storage)',
+      service: 'MojiMask Proxy v3 (KV Storage)',
       kvStore: kvName ? 'connected (binding: ' + kvName + ')' : 'NOT_CONFIGURED — add a KV Namespace binding in Worker Settings',
+      corsMode: ALLOWED_ORIGINS.length > 0 ? 'whitelist' : 'open (configure ALLOWED_ORIGINS for production)',
       timestamp: new Date().toISOString()
     });
   }
@@ -343,7 +384,7 @@ async function handleRequest(request) {
   if (method === 'GET' && path === '/') {
     var kvName2 = getKVName();
     return jsonOk({
-      service: 'MojiMask Proxy v2',
+      service: 'MojiMask Proxy v3',
       status: 'running',
       storage: kvName2 ? 'KV connected (' + kvName2 + ')' : 'KV NOT configured',
       routes: ['POST /', 'GET /peek/{key}', 'GET /file/{key}', 'GET /download?url=...', 'GET /health']

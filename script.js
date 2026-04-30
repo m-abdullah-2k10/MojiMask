@@ -33,6 +33,73 @@ CONFIG.EMOJI_MAP.forEach((emoji, index) => EMOJI_TO_INDEX.set(emoji, index));
 
 /* 
    ==========================================================================
+   WEB CRYPTO API — Helpers & Constants
+   ==========================================================================
+*/
+
+// Version tag prepended to new AES-GCM encrypted blobs.
+// Legacy CryptoJS blobs (AES-CBC) will NOT start with this byte,
+// allowing automatic format detection during decryption.
+const CRYPTO_VERSION = 0x02;
+
+/**
+ * Convert a Uint8Array to a Base64 string (handles arbitrarily large arrays).
+ */
+function uint8ArrayToBase64(uint8Array) {
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+        const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+        for (let j = 0; j < chunk.length; j++) {
+            binary += String.fromCharCode(chunk[j]);
+        }
+    }
+    return btoa(binary);
+}
+
+/**
+ * Convert a Base64 string to a Uint8Array.
+ */
+function base64ToUint8Array(base64) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+}
+
+/**
+ * Derive an AES-256 CryptoKey from a password via PBKDF2.
+ * @param {string} password
+ * @param {Uint8Array} salt - 16-byte random salt.
+ * @param {Object} opts - { iterations, hash, alg, usages }
+ * @returns {Promise<CryptoKey>}
+ */
+async function deriveKey(password, salt, opts = {}) {
+    const iterations = opts.iterations || 100000;
+    const hash       = opts.hash       || 'SHA-256';
+    const alg        = opts.alg        || 'AES-GCM';
+    const usages     = opts.usages     || ['encrypt', 'decrypt'];
+
+    const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(password),
+        'PBKDF2',
+        false,
+        ['deriveKey']
+    );
+    return crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt, iterations, hash },
+        keyMaterial,
+        { name: alg, length: 256 },
+        false,
+        usages
+    );
+}
+
+/* 
+   ==========================================================================
    STATE MANAGEMENT
    ==========================================================================
 */
@@ -111,16 +178,10 @@ function initUI() {
         console.error("Critical UI elements missing:", missing);
     }
 
-    // Verify Encryption Engine
-    if (typeof CryptoJS === 'undefined') {
-        console.error("CryptoJS NOT LOADED. Encryption will fail.");
-        notify("CRITICAL: Encryption engine failed to load. Retrying...", "error");
-        
-        // Attempt to dynamically reload the script if it failed
-        const script = document.createElement('script');
-        script.src = "https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js";
-        script.onload = () => notify("Encryption engine restored.", "success");
-        document.head.appendChild(script);
+    // Verify Web Crypto API availability
+    if (!crypto || !crypto.subtle) {
+        console.error("Web Crypto API not available. Encryption will fail.");
+        notify("CRITICAL: Encryption engine unavailable. Use HTTPS or a modern browser.", "error");
     }
 }
 
@@ -473,71 +534,118 @@ async function downloadData(keyData) {
 
 
 /**
- * Encrypts data using AES-256-CBC with PBKDF2 key derivation.
- * @param {string} data - The data to encrypt.
+ * Encrypts data using AES-256-GCM with PBKDF2 key derivation (Web Crypto API).
+ * AES-GCM provides built-in authentication (HMAC), preventing padding-oracle
+ * and bit-flipping attacks that plague unauthenticated AES-CBC.
+ *
+ * Output format: [version(1)] + [salt(16)] + [iv(12)] + [ciphertext + 16-byte auth tag]
+ * Encoded as Base64.
+ *
+ * @param {string} data - The plaintext to encrypt.
  * @param {string} password - The encryption password.
- * @returns {string} - Combined Hex string (Salt + IV + Ciphertext).
+ * @returns {Promise<string>} - Base64-encoded encrypted blob.
  */
-function encryptData(data, password) {
-    const salt = CryptoJS.lib.WordArray.random(128 / 8);
-    const iv = CryptoJS.lib.WordArray.random(128 / 8);
-    
-    // Step 5: Derive key using PBKDF2 (5,000 iterations for performance)
-    const key = CryptoJS.PBKDF2(password, salt, {
-        keySize: 256 / 32,
-        iterations: 5000
+async function encryptData(data, password) {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv   = crypto.getRandomValues(new Uint8Array(12)); // 12-byte IV is optimal for GCM
+
+    const key = await deriveKey(password, salt, {
+        iterations: 100000,
+        hash: 'SHA-256',
+        alg: 'AES-GCM',
+        usages: ['encrypt']
     });
 
-    // Step 5: Encrypt Base64 string
-    const encrypted = CryptoJS.AES.encrypt(data, key, {
-        iv: iv,
-        padding: CryptoJS.pad.Pkcs7,
-        mode: CryptoJS.mode.CBC
-    });
+    const ciphertext = await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        new TextEncoder().encode(data)
+    );
 
-    // Step 5: Output: Salt + IV + Ciphertext as a Base64 string
-    // Better than Hex as it reduces data size by ~33%
-    const combined = salt.clone().concat(iv).concat(encrypted.ciphertext);
-    return combined.toString(CryptoJS.enc.Base64);
+    // Assemble: version(1) + salt(16) + iv(12) + ciphertext+tag
+    const ctBytes  = new Uint8Array(ciphertext);
+    const combined = new Uint8Array(1 + 16 + 12 + ctBytes.length);
+    combined[0] = CRYPTO_VERSION;
+    combined.set(salt, 1);
+    combined.set(iv, 17);
+    combined.set(ctBytes, 29);
+
+    return uint8ArrayToBase64(combined);
 }
 
 /**
- * Decrypts data using AES-256-CBC with PBKDF2 key derivation.
- * @param {string} combinedBase64 - Combined Base64 string (Salt + IV + Ciphertext).
+ * Decrypts data — auto-detects format (new AES-GCM vs legacy CryptoJS AES-CBC).
+ * @param {string} combinedBase64 - Base64-encoded encrypted blob.
  * @param {string} password - The decryption password.
- * @returns {string} - Decrypted Base64 string (Image Data).
+ * @returns {Promise<string>} - Decrypted plaintext.
  */
-function decryptData(combinedBase64, password) {
-    const combined = CryptoJS.enc.Base64.parse(combinedBase64);
-    
-    // Step 10: Split (Salt: 128 bit, IV: 128 bit)
-    // WordArray words are 32-bit (4 bytes) each. 128 bit = 4 words.
-    const salt = CryptoJS.lib.WordArray.create(combined.words.slice(0, 4));
-    const iv = CryptoJS.lib.WordArray.create(combined.words.slice(4, 8));
-    const ciphertext = CryptoJS.lib.WordArray.create(combined.words.slice(8));
+async function decryptData(combinedBase64, password) {
+    const combined = base64ToUint8Array(combinedBase64);
 
-    // Step 10: Derive key using PBKDF2 (5,000 iterations)
-    const key = CryptoJS.PBKDF2(password, salt, {
-        keySize: 256 / 32,
-        iterations: 5000
+    if (combined[0] === CRYPTO_VERSION) {
+        return decryptGCM(combined, password);
+    }
+    // Legacy: CryptoJS AES-256-CBC format (Salt16 + IV16 + Ciphertext)
+    return decryptLegacyCBC(combined, password);
+}
+
+/**
+ * Decrypts new-format AES-256-GCM blobs.
+ */
+async function decryptGCM(combined, password) {
+    const salt       = combined.slice(1, 17);
+    const iv         = combined.slice(17, 29);
+    const ciphertext = combined.slice(29);
+
+    const key = await deriveKey(password, salt, {
+        iterations: 100000,
+        hash: 'SHA-256',
+        alg: 'AES-GCM',
+        usages: ['decrypt']
     });
 
-    // Step 10: Decrypt
-    const decrypted = CryptoJS.AES.decrypt(
-        { ciphertext: ciphertext },
-        key,
-        {
-            iv: iv,
-            padding: CryptoJS.pad.Pkcs7,
-            mode: CryptoJS.mode.CBC
-        }
-    );
-
-    const result = decrypted.toString(CryptoJS.enc.Utf8);
-    if (!result) {
+    try {
+        const decrypted = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv },
+            key,
+            ciphertext
+        );
+        return new TextDecoder().decode(decrypted);
+    } catch (_) {
         throw new Error("Decryption failed. Incorrect password or corrupted data.");
     }
-    return result;
+}
+
+/**
+ * Decrypts legacy CryptoJS AES-256-CBC blobs for backward compatibility.
+ * CryptoJS 4.x default: PBKDF2 with SHA-256, 5000 iterations (as set in old code).
+ */
+async function decryptLegacyCBC(combined, password) {
+    const salt       = combined.slice(0, 16);
+    const iv         = combined.slice(16, 32);
+    const ciphertext = combined.slice(32);
+
+    const key = await deriveKey(password, salt, {
+        iterations: 5000,
+        hash: 'SHA-256',
+        alg: 'AES-CBC',
+        usages: ['decrypt']
+    });
+
+    try {
+        const decrypted = await crypto.subtle.decrypt(
+            { name: 'AES-CBC', iv },
+            key,
+            ciphertext
+        );
+        const result = new TextDecoder().decode(decrypted);
+        if (!result) {
+            throw new Error("Empty result");
+        }
+        return result;
+    } catch (_) {
+        throw new Error("Decryption failed. Incorrect password or corrupted data.");
+    }
 }
 
 /**
@@ -648,10 +756,17 @@ function notify(message, type = 'info') {
         info: 'ℹ️'
     };
     
-    toast.innerHTML = `
-        <span class="toast-icon">${icons[type] || '✨'}</span>
-        <span class="toast-msg">${message}</span>
-    `;
+    // Use textContent (not innerHTML) to prevent XSS
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'toast-icon';
+    iconSpan.textContent = icons[type] || '✨';
+
+    const msgSpan = document.createElement('span');
+    msgSpan.className = 'toast-msg';
+    msgSpan.textContent = message;
+
+    toast.appendChild(iconSpan);
+    toast.appendChild(msgSpan);
     
     UI.notificationContainer.appendChild(toast);
     
@@ -741,8 +856,8 @@ function switchMode(mode) {
 async function handleEncryption() {
     console.log("Encryption initiated...");
     
-    if (typeof CryptoJS === 'undefined') {
-        notify("Encryption engine unavailable. Please refresh or check connection.", "error");
+    if (!crypto || !crypto.subtle) {
+        notify("Encryption engine unavailable. Use HTTPS or a modern browser.", "error");
         return;
     }
 
@@ -770,7 +885,7 @@ async function handleEncryption() {
         
         showLoading("Locking Intelligence...");
         // Step 5: AES-256 Encryption
-        state.encryptedBase64 = encryptData(state.processedBase64, password);
+        state.encryptedBase64 = await encryptData(state.processedBase64, password);
         
         showLoading("Processing...");
         // Step 6 & 7: Ephemeral Upload + Encoding Combined
@@ -794,7 +909,7 @@ async function handleEncryption() {
         hideLoading();
         notify("Encryption completed.", "success");
         
-        console.log("Intelligence Phase Complete. Emoji Key:", state.emojiKey);
+        console.log("Intelligence Phase Complete.");
 
     } catch (error) {
         console.error("Encryption Phase Error:", error);
@@ -805,8 +920,8 @@ async function handleEncryption() {
 }
 
 async function handleDecryption() {
-    if (typeof CryptoJS === 'undefined') {
-        notify("Decryption engine unavailable. Please refresh or check connection.", "error");
+    if (!crypto || !crypto.subtle) {
+        notify("Decryption engine unavailable. Use HTTPS or a modern browser.", "error");
         return;
     }
 
@@ -886,7 +1001,7 @@ async function handleDecryption() {
         // decryptData() throws "Decryption failed. Incorrect password..." on a
         // bad password — so a wrong attempt never reaches Step 3.
         showLoading("Decrypting...");
-        state.processedBase64 = decryptData(encryptedPayload, password);
+        state.processedBase64 = await decryptData(encryptedPayload, password);
 
         // ── STEP 3: Password correct — NOW officially consume the view ────────
         if (keyData.provider === 0) {
