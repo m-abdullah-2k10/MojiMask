@@ -21,10 +21,8 @@ const CONFIG = {
         'https://api.codetabs.com/v1/proxy?url=',
         'https://thingproxy.freeboard.io/fetch/'
     ],
-    // 256 Safe, single-character emojis for robust mapping
-    EMOJI_MAP: [
-        '😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🤩','🥳','😏','😒','😞','😔','😟','😕','🙁','☹️','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🥴','🤢','🤮','🤧','🤨','🧐','🤠','🤡','👿','😈','👹','👺','👻','💀','👽','👾','🤖','💩','😺','😸','😹','😻','😼','😽','🙀','😿','😾','🙈','🙉','🙊','💋','💌','💘','💝','💖','💗','💓','💞','💕','💟','❣️','💔','❤️','🧡','💛','💚','💙','💜','🤎','🖤','🤍','♨️','💢','💥','💫','💦','💨','🕳️','💣','💬','🗨️','🗯️','💭','💤','👋','🤚','🖐️','✋','🖖','👌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏','✍️','💅','🤳','💪','🦾','🦵','🦿','🦶','👂','🦻','👃','🧠','🦷','🦴','👀','👁️','👅','👄','👶','🧒','👦','👧','🧑','👱','👨','🧔','👩','🧓','👴','👵','👲','👳','🧕','👮','👷','💂','🕵️','🤵','👰','👸','🤴','👶','🍼','🧸','🧶'
-    ]
+    // 256 Safe, single-character emojis for robust mapping (No duplicates, no variation selectors)
+    EMOJI_MAP: ['😀','😁','😂','😃','😄','😅','😆','😇','😈','😉','😊','😋','😌','😍','😎','😏','😐','😑','😒','😓','😔','😕','😖','😗','😘','😙','😚','😛','😜','😝','😞','😟','😠','😡','😢','😣','😤','😥','😦','😧','😨','😩','😪','😫','😬','😭','😮','😯','😰','😱','😲','😳','😴','😵','😶','😷','😸','😹','😺','😻','😼','😽','😾','😿','🙀','🙁','🙂','🙃','🙄','🙅','🙆','🙇','🙈','🙉','🙊','🙋','🙌','🙍','🙎','🙏','🌀','🌁','🌂','🌃','🌄','🌅','🌆','🌇','🌈','🌉','🌊','🌋','🌌','🌍','🌎','🌏','🌐','🌑','🌒','🌓','🌔','🌕','🌖','🌗','🌘','🌙','🌚','🌛','🌜','🌝','🌞','🌟','🌠','🌡','🌢','🌣','🌤','🌥','🌦','🌧','🌨','🌩','🌪','🌫','🌬','🌭','🌮','🌯','🌰','🌱','🌲','🌳','🌴','🌵','🌶','🌷','🌸','🌹','🌺','🌻','🌼','🌽','🌾','🌿','🍀','🍁','🍂','🍃','🍄','🍅','🍆','🍇','🍈','🍉','🍊','🍋','🍌','🍍','🍎','🍏','🍐','🍑','🍒','🍓','🍔','🍕','🍖','🍗','🍘','🍙','🍚','🍛','🍜','🍝','🍞','🍟','🍠','🍡','🍢','🍣','🍤','🍥','🍦','🍧','🍨','🍩','🍪','🍫','🍬','🍭','🍮','🍯','🍰','🍱','🍲','🍳','🍴','🍵','🍶','🍷','🍸','🍹','🍺','🍻','🍼','🍽','🍾','🍿','🎀','🎁','🎂','🎃','🎄','🎅','🎆','🎇','🎈','🎉','🎊','🎋','🎌','🎍','🎎','🎏','🎐','🎑','🎒','🎓','🎔','🎕','🎖','🎗','🎘','🎙','🎚','🎛','🎜','🎝','🎞','🎟','🎠','🎡','🎢','🎣','🎤','🎥','🎦','🎧','🎨','🎩','🎪','🎫','🎬','🎭','🎮','🎯']
 };
 
 // Pre-computed Reverse Map for Lookups
@@ -911,6 +909,10 @@ async function handleEncryption() {
         
         console.log("Intelligence Phase Complete.");
 
+        // Clean up memory
+        state.processedBase64 = null;
+        state.encryptedBase64 = null;
+
     } catch (error) {
         console.error("Encryption Phase Error:", error);
         const errorMsg = error.message.includes("timeout") ? "Intelligence upload timed out. Try a smaller image." : error.message;
@@ -1019,7 +1021,6 @@ async function handleDecryption() {
         }
 
         // ── STEP 4: Render & Display ──────────────────────────────────────────
-        state.encryptedBase64 = encryptedPayload;
         UI.decryptedImage.src = state.processedBase64;
         UI.receiverDisplay.classList.remove('hidden');
         
@@ -1044,6 +1045,10 @@ async function handleDecryption() {
         
         console.log("Intelligence successfully restored.");
 
+        // Clean up memory
+        state.processedBase64 = null;
+        state.encryptedBase64 = null;
+
     } catch (error) {
         console.error("Decryption Phase Error:", error);
         notify(error.message, "error");
@@ -1055,11 +1060,20 @@ async function handleDecryption() {
  * Trigger a download of the decrypted intelligence image.
  */
 function downloadIntelligence() {
-    if (!state.processedBase64) return;
+    const src = UI.decryptedImage.src;
+    if (!src || !src.startsWith('data:')) return;
+
+    // Detect MIME type to set correct extension
+    const mimeMatch = src.match(/^data:(image\/[a-zA-Z0-9+-]+);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    let ext = 'jpg';
+    if (mime === 'image/png') ext = 'png';
+    else if (mime === 'image/webp') ext = 'webp';
+    else if (mime === 'image/gif') ext = 'gif';
 
     const link = document.createElement('a');
-    link.href = state.processedBase64;
-    link.download = `intelligence_${Date.now()}.jpg`;
+    link.href = src;
+    link.download = `intelligence_${Date.now()}.${ext}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
