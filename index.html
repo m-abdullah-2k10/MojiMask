@@ -161,35 +161,35 @@
                 <div class="guide-card">
                     <div class="card-icon">🔐</div>
                     <h3>AES-256 Encryption</h3>
-                    <p>Your data is secured using <strong>AES-256-CBC</strong>. Before any data leaves your browser, it is transformed into a cryptographically locked blob. We use <strong>PBKDF2</strong> with 100,000 iterations to derive a secure key from your password, ensuring even brute-force attempts are computationally exhaustive.</p>
+                    <p>Your data is secured using <strong>AES-256-CBC</strong>. It is transformed into a cryptographically locked blob instantly. We use <strong>PBKDF2</strong> with 100,000 iterations to derive a secure key from your password, ensuring even brute-force attempts are computationally exhaustive.</p>
                 </div>
                 <div class="guide-card">
                     <div class="card-icon">🌑</div>
                     <h3>Zero-Knowledge Architecture</h3>
-                    <p>MojiMask operates on a <strong>Zero-Knowledge</strong> principle. Neither our servers nor the cloud providers ever see your raw image or your password. The "Emoji Key" (emojis) is a localized encoding of a temporary resource ID, meaning the link between your data and the server is obfuscated.</p>
+                    <p>MojiMask operates on a strict <strong>Zero-Knowledge</strong> principle. Your raw image or password is never exposed. The generated "Emoji Key" is a clever localized encoding representing your encrypted data securely.</p>
                 </div>
                 <div class="guide-card">
                     <div class="card-icon">💥</div>
-                    <h3>Vanish Protocol</h3>
-                    <p>We enforce a strict <strong>Vanish Protocol</strong>. Your encrypted data is stored on ephemeral cloud storage designed to "Burn After Reading." Once a recipient decrypts the intelligence, it is wiped from the server. If not accessed, it self-destructs automatically after 7 days.</p>
+                    <h3>Customizable Vanish Protocol</h3>
+                    <p>We enforce a strict <strong>Vanish Protocol</strong> designed to "Burn After Reading." You control the lifespan of your image by setting exact view limits (from 1 up to 1000 views). Once the limit is reached, the data self-destructs instantly and becomes unrecoverable.</p>
                 </div>
                 <div class="guide-card">
                     <div class="card-icon">🛡️</div>
                     <h3>Browser-Side Privacy</h3>
-                    <p>All processing is handled by your local CPU. We do not use tracking cookies, analytics scripts, or any form of data logging. Your privacy is not just a policy; it's hard-coded into the architecture of the tool.</p>
+                    <p>All processing is handled directly by your local device's CPU. We do not use tracking cookies, analytics scripts, or any form of data logging. Your privacy is not just a policy; it's hard-coded into the architecture of the tool.</p>
                 </div>
             </div>
 
             <div class="technical-details">
-                <h3>Technical Breakdown</h3>
+                <h3>Technical Breakdown & Features</h3>
                 <div class="detail-item">
-                    <strong>1. Local Optimization:</strong> Images are shrunk and compressed using smart JPEG algorithms to ensure quick transmission and immediate destruction.
+                    <strong>1. Seamless Input Options:</strong> Supports high-quality uploads up to 1MB. You can browse for files, drag and drop, or simply paste an image directly from your clipboard for maximum efficiency.
                 </div>
                 <div class="detail-item">
-                    <strong>2. Emoji Key Mapping:</strong> The emojis you share are a custom character-map of the encrypted resource ID. This prevents simple text-based filtering by surveillance systems.
+                    <strong>2. Emoji Key Mapping:</strong> The emojis you share are a custom character-map acting as your unique encrypted signature. This prevents simple text-based filtering by surveillance systems.
                 </div>
                 <div class="detail-item">
-                    <strong>3. Session Guard:</strong> Each session tracks extracted signatures to prevent reloading or double-accessing the same intelligence, enforcing the "One View" rule.
+                    <strong>3. View Tracking & Limits:</strong> Each session intelligently tracks views and access limits. Whether you set it to vanish after a single view or a custom amount, the "Peek-and-Confirm" logic ensures failed password attempts never waste a view.
                 </div>
             </div>
 
@@ -198,21 +198,21 @@
                     <span class="step-num">01</span>
                     <div class="step-content">
                         <h4>Secure Capture</h4>
-                        <p>Upload your intelligence. Your browser immediately optimizes and encrypts it locally.</p>
+                        <p>Upload, drop, or paste your intelligence. Your device immediately optimizes and encrypts it locally.</p>
                     </div>
                 </div>
                 <div class="step">
                     <span class="step-num">02</span>
                     <div class="step-content">
                         <h4>Masked Sharing</h4>
-                        <p>Copy the Emoji Key emojis. Share them via any communication channel securely.</p>
+                        <p>Copy the resulting Emoji Key. Share these emojis via any text or communication channel securely.</p>
                     </div>
                 </div>
                 <div class="step">
                     <span class="step-num">03</span>
                     <div class="step-content">
                         <h4>Destructive Access</h4>
-                        <p>The recipient unlocks the data. The server deletes the file forever upon retrieval.</p>
+                        <p>The recipient enters the Emoji Key and password to unlock the image. Once the allowed views run out, it vanishes forever.</p>
                     </div>
                 </div>
             </div>
@@ -221,7 +221,7 @@
 
         <footer class="app-footer">
             <p class="crypto-status">System Status: <span class="status-online">ENCRYPTION_ACTIVE</span></p>
-            <p class="disclaimer">End-to-End Encrypted | No Data Stored on Servers</p>
+            <p class="disclaimer">End-to-End Encrypted | Zero Knowledge Operations</p>
         </footer>
     </main>
 

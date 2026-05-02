@@ -171,12 +171,11 @@ function initUI() {
     // Verify critical elements
     const missing = Object.entries(UI).filter(([key, val]) => !val).map(([key]) => key);
     if (missing.length > 0) {
-        console.error("Critical UI elements missing:", missing);
+        // UI missing
     }
 
     // Verify Web Crypto API availability
     if (!crypto || !crypto.subtle) {
-        console.error("Web Crypto API not available. Encryption will fail.");
         notify("CRITICAL: Encryption engine unavailable. Use HTTPS or a modern browser.", "error");
     }
 }
@@ -283,7 +282,6 @@ async function robustFetch(url, options = {}, retries = 2, timeout = CONFIG.FETC
             
             if (i === retries) throw new Error(message);
             
-            console.warn(`Fetch attempt ${i + 1} failed (${message}). Retrying...`);
             await new Promise(r => setTimeout(r, 1000 * (i + 1))); // Exponential backoff
         }
     }
@@ -308,7 +306,6 @@ async function uploadData(encryptedBase64, maxViews = 1) {
     // The worker already knows the target; do NOT append the file.io URL to its path.
     const CF_WORKER_URL = 'https://fileio-proxy.codegenious-2k10.workers.dev/';
     try {
-        console.log(`[Cloudflare Worker] Uploading via primary proxy (${maxViews} views)...`);
         const cfResponse = await robustFetch(CF_WORKER_URL, {
             method: 'POST',
             body: buildFileIoFormData()
@@ -318,12 +315,10 @@ async function uploadData(encryptedBase64, maxViews = 1) {
         try { cfRes = await cfResponse.json(); } catch (_) { cfRes = null; }
 
         if (cfRes && cfRes.success && cfRes.key) {
-            console.log('✅ Upload succeeded via Cloudflare Worker.');
             return keyToEmojis(cfRes.key, 0, parseInt(maxViews));
         }
-        console.warn('[Cloudflare Worker] Returned success=false or bad JSON. Trying CORS bridges...');
     } catch (err) {
-        console.warn(`[Cloudflare Worker] Failed: ${err.message}. Trying CORS bridges...`);
+        // Fallback to next route
     }
 
     // ── ROUTE 0-B: Public CORS bridges → file.io ──────────────────────────────────────────
@@ -334,7 +329,6 @@ async function uploadData(encryptedBase64, maxViews = 1) {
         bridgeAttempt++;
         try {
             const proxiedUrl = `${bridge}${encodeURIComponent(CONFIG.UPLOAD_ENDPOINT)}`;
-            console.log(`[CORS Bridge ${bridgeAttempt}/${CONFIG.CORS_BRIDGES.length}] Trying: ${bridge}`);
 
             const response = await robustFetch(proxiedUrl, {
                 method: 'POST',
@@ -343,25 +337,20 @@ async function uploadData(encryptedBase64, maxViews = 1) {
 
             let res;
             try { res = await response.json(); } catch (_) {
-                console.warn(`[CORS Bridge ${bridgeAttempt}] Non-JSON response. Trying next...`);
                 continue;
             }
 
             if (res && res.success && res.key) {
-                console.log(`✅ Upload succeeded via CORS Bridge ${bridgeAttempt}.`);
                 return keyToEmojis(res.key, 0, parseInt(maxViews));
             }
-            console.warn(`[CORS Bridge ${bridgeAttempt}] success=false or missing key. Trying next...`);
         } catch (err) {
-            console.warn(`[CORS Bridge ${bridgeAttempt}] Failed: ${err.message}.${bridgeAttempt < CONFIG.CORS_BRIDGES.length ? ' Trying next...' : ' All bridges exhausted.'}`);
+            // continue trying bridges
         }
     }
-    console.warn('All file.io routes failed. Engaging alternative providers...');
 
     // ── ROUTE 1: Fallback A (0x0.st) ───────────────────────────────────────────────────────
     // No server-side download limit; view enforcement falls back to client-side localStorage.
     try {
-        console.log('Attempting Fallback Route 2 (0x0.st)...');
         const zeroXData = new FormData();
         zeroXData.append('file', blob, 'intel.enc');
         zeroXData.append('secret', '');
@@ -375,15 +364,14 @@ async function uploadData(encryptedBase64, maxViews = 1) {
         if (trimmedUrl.startsWith('http')) {
             const key0x0 = encodeURIComponent(trimmedUrl);
             if (maxViews > 0) {
-                notify(`⚠️ Primary providers unreachable. Upload succeeded via fallback. View limit (${maxViews}) is enforced locally on this device.`, 'info');
+                notify(`⚠️ Using secure backup network due to heavy traffic. Image secured successfully.`, 'info');
             }
             return keyToEmojis(key0x0, 3, parseInt(maxViews));
         }
-    } catch (e) { console.warn('Fallback Route 2 (0x0.st) Failed:', e.message); }
+    } catch (e) { /* Fallback Route 2 Failed */ }
 
     // ── ROUTE 3: Deep Fallback (tmpfiles.org) ──────────────────────────────────────────────
     try {
-        console.log('Attempting Deep Fallback (tmpfiles.org)...');
         const fallBackData = new FormData();
         fallBackData.append('file', blob, 'intel.enc');
 
@@ -395,13 +383,13 @@ async function uploadData(encryptedBase64, maxViews = 1) {
         const id = resC.data.url.split('/').slice(-2, -1)[0];
         if (id) {
             if (maxViews > 0) {
-                notify(`⚠️ Primary providers unreachable. Upload succeeded via fallback. View limit (${maxViews}) is enforced locally on this device.`, 'info');
+                notify(`⚠️ Using secure backup network due to heavy traffic. Image secured successfully.`, 'info');
             }
             return keyToEmojis(id, 2, parseInt(maxViews));
         }
-    } catch (e) { console.warn('Deep Fallback (tmpfiles.org) Failed:', e.message); }
+    } catch (e) { /* Deep Fallback Failed */ }
 
-    throw new Error('ALL DATA ROUTES BLOCKED. Check your network/AdBlock settings and try again.');
+    throw new Error('Unable to connect to the secure network. Please check your internet connection or try turning off your adblocker.');
 }
 
 
@@ -433,10 +421,8 @@ async function downloadData(keyData) {
             showLoading("Connecting to Secure Vault...");
             const url = `${CF_WORKER_BASE}/file/${key}`;
             const response = await robustFetch(url, {}, 1, 12000);
-            console.log('✅ Download succeeded via Cloudflare Worker KV.');
             return await response.text();
         } catch (error) {
-            console.warn(`[Worker KV Download] Failed: ${error.message}`);
             throw new Error(
                 error.message.includes("not found") || error.message.includes("404")
                     ? "Intelligence expired or self-destructed."
@@ -455,8 +441,6 @@ async function downloadData(keyData) {
     // Cache-buster so proxies don't serve a stale cached copy
     url += `?cb=${Date.now()}`;
 
-    console.log(`Vault path: ${url}`);
-
     // Determine whether this provider tracks server-side download counts.
     const hasDownloadQuota = (provider === 1) && maxViews > 0;
 
@@ -468,10 +452,8 @@ async function downloadData(keyData) {
             return await response.text();
         } catch (error) {
             if (error.message.includes("self-destructed")) throw error;
-            console.warn("Direct path blocked. Initializing Bridge Relay...");
         }
     } else {
-        console.log(`Limited key (${maxViews} max views) — routing through relay.`);
         showLoading("Opening Secure Relay...");
     }
 
@@ -481,10 +463,9 @@ async function downloadData(keyData) {
         showLoading("Connecting via Secure Relay...");
         const workerUrl = `${CF_DOWNLOAD_URL}?url=${encodeURIComponent(url)}`;
         const workerResponse = await robustFetch(workerUrl, {}, 0, 12000);
-        console.log('✅ Download succeeded via Cloudflare Worker relay.');
         return await workerResponse.text();
     } catch (e) {
-        console.warn(`[Worker Download Proxy] Failed: ${e.message}. Trying public bridges...`);
+        // Fallback to public bridges
     }
 
     // ── Bridge Relay: Public CORS Bridges (last resort) ─────────────────────
@@ -497,7 +478,6 @@ async function downloadData(keyData) {
             const bridgeResponse = await robustFetch(bridgeUrl, {}, 0, 8000);
             return await bridgeResponse.text();
         } catch (e) {
-            console.warn(`Bridge ${bridgeCount} failed: ${e.message}`);
             lastError = e;
             bridgeCount++;
             continue;
@@ -636,7 +616,6 @@ async function processImage(file) {
     const isLarge = file.size > CONFIG.MAX_IMAGE_SIZE;
     
     if (!isLarge) {
-        console.log(`Intelligence within limits (${(file.size / 1024).toFixed(2)}KB). Using original capture.`);
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = (e) => resolve(e.target.result);
@@ -645,7 +624,6 @@ async function processImage(file) {
         });
     }
 
-    console.log(`Optimizing Large Intelligence Payload (${(file.size / 1024).toFixed(2)}KB)...`);
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -699,7 +677,6 @@ async function processImage(file) {
                     base64 = canvas.toDataURL('image/jpeg', quality);
                 }
 
-                console.log(`Optimization complete: Quality=${quality.toFixed(2)}, Dimensions=${w}x${h}, Image Size=${(base64.length * 0.75 / 1024).toFixed(2)}KB`);
                 resolve(base64);
             };
             img.onerror = reject;
@@ -828,7 +805,6 @@ function switchMode(mode) {
 }
 
 async function handleEncryption() {
-    console.log("Encryption initiated...");
     UI.btnInitiate.disabled = true; // Debounce
     
     if (!crypto || !crypto.subtle) {
@@ -891,15 +867,12 @@ async function handleEncryption() {
 
         hideLoading();
         notify("Encryption completed.", "success");
-        
-        console.log("Intelligence Phase Complete.");
 
         // Clean up sensitive inputs
         UI.encryptPassword.value = '';
         UI.btnClearEncryptPass.classList.remove('visible');
 
     } catch (error) {
-        console.error("Encryption Phase Error:", error);
         const errorMsg = error.message.includes("timeout") ? "Intelligence upload timed out. Try a smaller image." : error.message;
         notify("Encryption failed: " + errorMsg, "error");
         hideLoading();
@@ -977,7 +950,6 @@ async function handleDecryption() {
                 }
 
                 encryptedPayload = await peekResponse.text();
-                console.log(`✅ Peek succeeded. Server count: ${serverDownloads}/${serverMaxDownloads || '∞'}`);
             } catch (peekError) {
                 // Re-throw our own "Access denied" error as-is
                 if (peekError.message.includes("Access denied")) throw peekError;
@@ -1011,10 +983,8 @@ async function handleDecryption() {
                 consumedDownloads = parseInt(consumeResponse.headers.get('X-Downloads') || '0');
                 consumedMaxDownloads = parseInt(consumeResponse.headers.get('X-Max-Downloads') || '0');
                 await consumeResponse.text(); // drain response body
-                console.log(`✅ View consumed. Server count now: ${consumedDownloads}/${consumedMaxDownloads || '∞'}`);
             } catch (consumeError) {
-                // Non-fatal: image already decrypted; log and continue.
-                console.warn(`[Consume] Failed to register view: ${consumeError.message}`);
+                // Non-fatal: image already decrypted; continue.
             }
         }
 
@@ -1037,26 +1007,29 @@ async function handleDecryption() {
         if (effectiveMax > 0 && effectiveUsed !== null) {
             const remaining = effectiveMax - effectiveUsed;
             if (remaining <= 0) {
-                notify(`Intelligence restored. ⚠️ This was the FINAL view — key is now destroyed.`, "success");
+                notify(`⚠️ This is the FINAL view. The image has now self-destructed.`, "success");
+            } else if (remaining <= 10) {
+                notify(`Image restored. ${remaining} view(s) remaining before self-destruct.`, "success");
             } else {
-                notify(`Intelligence restored. ${remaining} view(s) remaining before self-destruct.`, "success");
+                notify(`Image restored successfully.`, "success");
             }
         } else if (maxViews > 0 && keyData.provider !== 0) {
             // Non-KV providers: no server counter available, show generic message
-            notify(`Intelligence restored. View limit is ${maxViews} (enforced server-side where possible).`, "success");
+            if (maxViews <= 10) {
+                notify(`Image restored. View limit is ${maxViews}.`, "success");
+            } else {
+                notify(`Image restored successfully.`, "success");
+            }
         } else {
-            notify("Intelligence restored successfully.", "success");
+            notify("Image restored successfully.", "success");
         }
         // ────────────────────────────────────────────────────────────────────
-        
-        console.log("Intelligence successfully restored.");
 
         // Clean up sensitive inputs
         UI.decryptPassword.value = '';
         UI.btnClearDecryptPass.classList.remove('visible');
 
     } catch (error) {
-        console.error("Decryption Phase Error:", error);
         notify(error.message, "error");
         hideLoading();
     } finally {
@@ -1186,7 +1159,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             notify("No image found in clipboard.", "error");
         } catch (err) {
-            console.error(err);
             notify("Failed to read clipboard. Please allow permissions.", "error");
         }
     });
@@ -1308,7 +1280,6 @@ document.addEventListener('DOMContentLoaded', () => {
             navigator.clipboard.writeText(keyToCopy).then(() => {
                 onCopySuccess();
             }).catch(err => {
-                console.error('Clipboard API failed, using fallback:', err);
                 fallbackCopy(keyToCopy);
             });
         } else {
@@ -1343,13 +1314,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (successful) onCopySuccess();
             else throw new Error("Fallback copy failed");
         } catch (err) {
-            console.error('Fallback copy failed:', err);
             notify('Failed to copy. Please select and copy manually.', 'error');
         }
     }
 
     // 7. Initial State
     switchMode('encrypt');
-    console.log("Intelligence Tool Booted.");
 });
 

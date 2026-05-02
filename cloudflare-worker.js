@@ -110,7 +110,7 @@ function generateKey() {
 async function handleUpload(request) {
   var KV = getKV();
   if (!KV) {
-    return jsonError('KV storage not configured. Bind a KV namespace to this Worker (any name works).', 500);
+    return jsonError('Server configuration error. Please try again later.', 500);
   }
 
   try {
@@ -126,7 +126,7 @@ async function handleUpload(request) {
 
     // Prevent abuse (Max 2MB upload limit)
     if (data.length > 2 * 1024 * 1024) {
-      return jsonError('Payload too large. Maximum size is 2MB.', 413);
+      return jsonError('Image size exceeds the maximum allowed limit.', 413);
     }
 
     // Get upload options
@@ -180,14 +180,14 @@ async function handleUpload(request) {
 async function handleFilePeek(key) {
   var KV = getKV();
   if (!KV) {
-    return jsonError('KV storage not configured.', 500);
+    return jsonError('Server configuration error.', 500);
   }
 
   try {
     var result = await KV.getWithMetadata(key);
 
     if (result.value === null) {
-      return jsonError('File not found. It may have expired or been deleted.', 404);
+      return jsonError('This image could not be found. It may have expired or self-destructed.', 404);
     }
 
     var meta = result.metadata || {};
@@ -197,7 +197,7 @@ async function handleFilePeek(key) {
     // Still respect the exhausted-limit check so callers see 404 properly
     if (maxDl > 0 && currentDl >= maxDl) {
       await KV.delete(key);
-      return jsonError('File has been deleted after reaching max downloads.', 404);
+      return jsonError('This image has reached its maximum view limit and has self-destructed.', 404);
     }
 
     // Return the raw data — counter is NOT changed
@@ -220,14 +220,14 @@ async function handleFilePeek(key) {
 async function handleFileDownload(key) {
   var KV = getKV();
   if (!KV) {
-    return jsonError('KV storage not configured.', 500);
+    return jsonError('Server configuration error.', 500);
   }
 
   try {
     var result = await KV.getWithMetadata(key);
 
     if (result.value === null) {
-      return jsonError('File not found. It may have expired or been deleted.', 404);
+      return jsonError('This image could not be found. It may have expired or self-destructed.', 404);
     }
 
     var meta = result.metadata || {};
@@ -238,7 +238,7 @@ async function handleFileDownload(key) {
     if (maxDl > 0 && currentDl >= maxDl) {
       // Already exhausted — delete and return 404
       await KV.delete(key);
-      return jsonError('File has been deleted after reaching max downloads.', 404);
+      return jsonError('This image has reached its maximum view limit and has self-destructed.', 404);
     }
 
     // Increment download count
