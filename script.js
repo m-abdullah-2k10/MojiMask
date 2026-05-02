@@ -1157,9 +1157,39 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
             }
-            notify("No image found in clipboard.", "error");
+            notify("No image data found. Try Ctrl+V or long-press to Paste.", "error");
         } catch (err) {
-            notify("Failed to read clipboard. Please allow permissions.", "error");
+            notify("Clipboard access blocked. Use Ctrl+V or long-press to Paste.", "error");
+        }
+    });
+
+    // 4.2 Global Paste Event Listener
+    document.addEventListener('paste', (e) => {
+        if (state.currentMode !== 'encrypt') return;
+        
+        // 1. Check if a file was pasted (e.g. from desktop)
+        if (e.clipboardData.files && e.clipboardData.files.length > 0) {
+            const file = e.clipboardData.files[0];
+            if (file.type.startsWith('image/')) {
+                handleFileSelect({ target: { files: [file] } });
+                e.preventDefault();
+                return;
+            }
+        }
+        
+        // 2. Check for image data (e.g. snipping tool, copy image from web)
+        if (e.clipboardData.items) {
+            for (let i = 0; i < e.clipboardData.items.length; i++) {
+                if (e.clipboardData.items[i].type.startsWith('image/')) {
+                    const blob = e.clipboardData.items[i].getAsFile();
+                    if (blob) {
+                        const file = new File([blob], "pasted-image.png", { type: blob.type });
+                        handleFileSelect({ target: { files: [file] } });
+                        e.preventDefault();
+                        return;
+                    }
+                }
+            }
         }
     });
 
