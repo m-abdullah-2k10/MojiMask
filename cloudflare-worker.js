@@ -69,6 +69,7 @@ function corsHeaders(request) {
     'Access-Control-Allow-Origin': origin || 'null',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': '*',
+    'Access-Control-Expose-Headers': 'X-Downloads, X-Max-Downloads, X-Peek',
     'Access-Control-Max-Age': '86400'
   };
 }
@@ -122,6 +123,11 @@ async function handleUpload(request) {
 
     // Read file content as text
     var data = await file.text();
+
+    // Prevent abuse (Max 2MB upload limit)
+    if (data.length > 2 * 1024 * 1024) {
+      return jsonError('Payload too large. Maximum size is 2MB.', 413);
+    }
 
     // Get upload options
     var maxDownloads = parseInt(formData.get('maxDownloads') || '0');

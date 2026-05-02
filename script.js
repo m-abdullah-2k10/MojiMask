@@ -103,8 +103,6 @@ async function deriveKey(password, salt, opts = {}) {
 
 const state = {
     selectedFile: null,
-    processedBase64: null,
-    encryptedBase64: null,
     emojiKey: null,
     currentMode: 'encrypt',
     extractedSignatures: new Set() // Session guard for "Burn After Reading"
@@ -162,6 +160,7 @@ function initUI() {
         btnClearEmojis: document.getElementById('btn-clear-emojis'),
         btnClearRestored: document.getElementById('btn-clear-restored'),
         btnClearImage: document.getElementById('btn-clear-image'),
+        btnPasteImage: document.getElementById('btn-paste-image'),
         btnToggleEncryptPass: document.getElementById('btn-toggle-encrypt-password'),
         btnToggleDecryptPass: document.getElementById('btn-toggle-decrypt-password'),
         maxViews: document.getElementById('max-views'),
@@ -750,6 +749,11 @@ function notify(message, type = 'info') {
     
     UI.notificationContainer.appendChild(toast);
     
+    // Cap to 3 toasts (issue 6.2)
+    while (UI.notificationContainer.children.length > 3) {
+        UI.notificationContainer.removeChild(UI.notificationContainer.firstChild);
+    }
+    
     // Auto-remove after 4 seconds
     setTimeout(() => {
         toast.classList.add('fade-out');
@@ -770,17 +774,7 @@ function shake(element) {
     }, 400);
 }
 
-// Clear invalid state and toggle clear buttons on input
-document.addEventListener('input', (e) => {
-    if (e.target.tagName === 'INPUT') {
-        e.target.classList.remove('invalid');
-        
-        // Handle clear button visibility
-        if (e.target === UI.encryptPassword) toggleClearButton(UI.encryptPassword, UI.btnClearEncryptPass);
-        if (e.target === UI.emojiInput) toggleClearButton(UI.emojiInput, UI.btnClearEmojiInput);
-        if (e.target === UI.decryptPassword) toggleClearButton(UI.decryptPassword, UI.btnClearDecryptPass);
-    }
-});
+// Clear invalid state and toggle clear buttons on input (moved to DOMContentLoaded)
 
 /**
  * Toggles the visibility of a clear button based on input value.
@@ -835,6 +829,7 @@ function switchMode(mode) {
 
 async function handleEncryption() {
     console.log("Encryption initiated...");
+    UI.btnInitiate.disabled = true; // Debounce
     
     if (!crypto || !crypto.subtle) {
         notify("Encryption engine unavailable. Use HTTPS or a modern browser.", "error");
@@ -846,12 +841,14 @@ async function handleEncryption() {
     if (!state.selectedFile) {
         notify("Intelligence data missing. Please capture an image.", "error");
         shake(UI.dropZone);
+        UI.btnInitiate.disabled = false;
         return;
     }
     
     if (!password) {
         notify("Security clearance required. Please define an access code.", "error");
         shake(UI.encryptPassword);
+        UI.btnInitiate.disabled = false;
         return;
     }
 
@@ -861,16 +858,22 @@ async function handleEncryption() {
         await new Promise(r => setTimeout(r, 100));
 
         // Step 4: Image Processing
-        state.processedBase64 = await processImage(state.selectedFile);
+        let processedBase64 = await processImage(state.selectedFile);
         
         showLoading("Locking Intelligence...");
         // Step 5: AES-256 Encryption
-        state.encryptedBase64 = await encryptData(state.processedBase64, password);
+        let encryptedBase64 = await encryptData(processedBase64, password);
+        
+        // Free memory immediately (Fixes issue 7.1)
+        processedBase64 = null;
         
         showLoading("Processing...");
         // Step 6 & 7: Ephemeral Upload + Encoding Combined
         const maxViews = parseInt(UI.maxViews?.value) || 1;
-        state.emojiKey = await uploadData(state.encryptedBase64, maxViews);
+        state.emojiKey = await uploadData(encryptedBase64, maxViews);
+        
+        // Free encrypted memory
+        encryptedBase64 = null;
         
         // Display Result
         UI.emojiKeyDisplay.textContent = state.emojiKey;
@@ -891,9 +894,7 @@ async function handleEncryption() {
         
         console.log("Intelligence Phase Complete.");
 
-        // Clean up memory and sensitive inputs
-        state.processedBase64 = null;
-        state.encryptedBase64 = null;
+        // Clean up sensitive inputs
         UI.encryptPassword.value = '';
         UI.btnClearEncryptPass.classList.remove('visible');
 
@@ -902,12 +903,17 @@ async function handleEncryption() {
         const errorMsg = error.message.includes("timeout") ? "Intelligence upload timed out. Try a smaller image." : error.message;
         notify("Encryption failed: " + errorMsg, "error");
         hideLoading();
+    } finally {
+        UI.btnInitiate.disabled = false;
     }
 }
 
 async function handleDecryption() {
+    UI.btnDecrypt.disabled = true; // Debounce
+
     if (!crypto || !crypto.subtle) {
         notify("Decryption engine unavailable. Use HTTPS or a modern browser.", "error");
+        UI.btnDecrypt.disabled = false;
         return;
     }
 
@@ -917,12 +923,14 @@ async function handleDecryption() {
     if (!emojiString) {
         notify("Emoji Key missing. Please provide the emojis.", "error");
         shake(UI.emojiInput);
+        UI.btnDecrypt.disabled = false;
         return;
     }
 
     if (!password) {
         notify("Security clearance required. Please provide the access code.", "error");
         shake(UI.decryptPassword);
+        UI.btnDecrypt.disabled = false;
         return;
     }
 
@@ -936,43 +944,43 @@ async function handleDecryption() {
             throw new Error("Invalid Emoji Key format.");
         }
 
-        // ── View-Count Enforcement ──────────────────────────────────────────
-        // The max-view limit is encoded in the emoji key itself (client-side).
-        // We store a counter in localStorage keyed by the file key.
-        const storageKey = `mojimask_views_${keyData.key}`;
         const maxViews = keyData.maxViews; // 0 = unlimited
-
-        if (maxViews > 0) {
-            const stored = JSON.parse(localStorage.getItem(storageKey) || '{}');
-            const usedViews = stored.count || 0;
-
-            if (usedViews >= maxViews) {
-                throw new Error(`Access denied. This intelligence has been viewed ${maxViews} time(s) and has self-destructed.`);
-            }
-            
-            const remaining = maxViews - usedViews - 1;
-            console.log(`View ${usedViews + 1} of ${maxViews}. ${remaining} remaining after this.`);
-        }
-        // ────────────────────────────────────────────────────────────────────
 
         // ── STEP 1: PEEK — fetch encrypted data WITHOUT consuming a view ──────
         // For provider 0 (Cloudflare KV) we call the read-only /peek/ endpoint.
         // This returns the encrypted payload but does NOT decrement the download
         // counter or trigger auto-delete — so a wrong password costs nothing.
+        // The peek response also returns server-side counters via headers
+        // (X-Downloads, X-Max-Downloads) so we can check the REAL remaining
+        // views — no localStorage needed, no cross-browser desync possible.
+        //
         // For providers 1-3 (external services), a plain GET doesn't decrement
-        // their server-side quota, so we download freely and only count locally
-        // after a confirmed successful decryption.
+        // their server-side quota, so we download freely.
         const CF_WORKER_BASE = 'https://fileio-proxy.codegenious-2k10.workers.dev';
         let encryptedPayload;
+        let serverDownloads = null;  // Actual server-side view count
+        let serverMaxDownloads = null;
 
         if (keyData.provider === 0) {
             showLoading("Fetching Intelligence...");
             try {
                 const peekUrl = `${CF_WORKER_BASE}/peek/${keyData.key}`;
                 const peekResponse = await robustFetch(peekUrl, {}, 1, 12000);
+
+                // Read the authoritative server-side counters from response headers
+                serverDownloads = parseInt(peekResponse.headers.get('X-Downloads') || '0');
+                serverMaxDownloads = parseInt(peekResponse.headers.get('X-Max-Downloads') || '0');
+
+                // Server-side exhaustion check (authoritative — works across all browsers/tabs)
+                if (serverMaxDownloads > 0 && serverDownloads >= serverMaxDownloads) {
+                    throw new Error(`Access denied. This intelligence has been viewed ${serverMaxDownloads} time(s) and has self-destructed.`);
+                }
+
                 encryptedPayload = await peekResponse.text();
-                console.log('✅ Peek succeeded (view not yet consumed).');
+                console.log(`✅ Peek succeeded. Server count: ${serverDownloads}/${serverMaxDownloads || '∞'}`);
             } catch (peekError) {
+                // Re-throw our own "Access denied" error as-is
+                if (peekError.message.includes("Access denied")) throw peekError;
                 throw new Error(
                     peekError.message.includes("not found") || peekError.message.includes("404")
                         ? "Intelligence expired or self-destructed."
@@ -987,17 +995,23 @@ async function handleDecryption() {
         // decryptData() throws "Decryption failed. Incorrect password..." on a
         // bad password — so a wrong attempt never reaches Step 3.
         showLoading("Decrypting...");
-        state.processedBase64 = await decryptData(encryptedPayload, password);
+        let processedBase64 = await decryptData(encryptedPayload, password);
 
         // ── STEP 3: Password correct — NOW officially consume the view ────────
+        let consumedDownloads = null;
+        let consumedMaxDownloads = null;
+
         if (keyData.provider === 0) {
             showLoading("Confirming Access...");
             try {
                 const consumeResponse = await robustFetch(
                     `${CF_WORKER_BASE}/file/${keyData.key}`, {}, 1, 12000
                 );
-                await consumeResponse.text(); // response body not needed
-                console.log('✅ View consumed via /file/ endpoint.');
+                // Read the post-consume counters for accurate "remaining" display
+                consumedDownloads = parseInt(consumeResponse.headers.get('X-Downloads') || '0');
+                consumedMaxDownloads = parseInt(consumeResponse.headers.get('X-Max-Downloads') || '0');
+                await consumeResponse.text(); // drain response body
+                console.log(`✅ View consumed. Server count now: ${consumedDownloads}/${consumedMaxDownloads || '∞'}`);
             } catch (consumeError) {
                 // Non-fatal: image already decrypted; log and continue.
                 console.warn(`[Consume] Failed to register view: ${consumeError.message}`);
@@ -1005,23 +1019,31 @@ async function handleDecryption() {
         }
 
         // ── STEP 4: Render & Display ──────────────────────────────────────────
-        UI.decryptedImage.src = state.processedBase64;
+        UI.decryptedImage.src = processedBase64;
         UI.receiverDisplay.classList.remove('hidden');
+        
+        // Free memory immediately
+        processedBase64 = null;
+        encryptedPayload = null;
         
         hideLoading();
 
-        // ── Increment local view counter (success only) ───────────────────────
-        if (maxViews > 0) {
-            const stored = JSON.parse(localStorage.getItem(storageKey) || '{}');
-            const newCount = (stored.count || 0) + 1;
-            localStorage.setItem(storageKey, JSON.stringify({ count: newCount, max: maxViews }));
+        // ── View counter notification (server-authoritative) ──────────────────
+        // Use the post-consume server headers when available; fall back to the
+        // emoji-encoded maxViews for non-KV providers.
+        const effectiveMax = consumedMaxDownloads ?? serverMaxDownloads ?? maxViews;
+        const effectiveUsed = consumedDownloads ?? (serverDownloads !== null ? serverDownloads + 1 : null);
 
-            const remaining = maxViews - newCount;
-            if (remaining === 0) {
+        if (effectiveMax > 0 && effectiveUsed !== null) {
+            const remaining = effectiveMax - effectiveUsed;
+            if (remaining <= 0) {
                 notify(`Intelligence restored. ⚠️ This was the FINAL view — key is now destroyed.`, "success");
             } else {
                 notify(`Intelligence restored. ${remaining} view(s) remaining before self-destruct.`, "success");
             }
+        } else if (maxViews > 0 && keyData.provider !== 0) {
+            // Non-KV providers: no server counter available, show generic message
+            notify(`Intelligence restored. View limit is ${maxViews} (enforced server-side where possible).`, "success");
         } else {
             notify("Intelligence restored successfully.", "success");
         }
@@ -1029,9 +1051,7 @@ async function handleDecryption() {
         
         console.log("Intelligence successfully restored.");
 
-        // Clean up memory and sensitive inputs
-        state.processedBase64 = null;
-        state.encryptedBase64 = null;
+        // Clean up sensitive inputs
         UI.decryptPassword.value = '';
         UI.btnClearDecryptPass.classList.remove('visible');
 
@@ -1039,6 +1059,8 @@ async function handleDecryption() {
         console.error("Decryption Phase Error:", error);
         notify(error.message, "error");
         hideLoading();
+    } finally {
+        UI.btnDecrypt.disabled = false;
     }
 }
 
@@ -1074,6 +1096,7 @@ function handleFileSelect(e) {
         const dropZoneLabel = UI.dropZoneText.querySelector('p');
         dropZoneLabel.textContent = `Captured: ${file.name}`;
         UI.dropZone.style.borderColor = 'var(--primary-color)';
+        UI.btnPasteImage.classList.add('hidden');
         UI.btnClearImage.classList.add('visible');
         UI.btnPreviewImage.classList.add('visible');
 
@@ -1109,6 +1132,7 @@ function clearImageSelection() {
     dropZoneLabel.textContent = 'Upload, Drag, or Paste Image';
     UI.dropZone.style.borderColor = 'var(--border-color)';
     UI.btnClearImage.classList.remove('visible');
+    UI.btnPasteImage.classList.remove('hidden');
     UI.btnPreviewImage.classList.remove('visible');
     UI.btnPreviewImage.classList.remove('active');
     UI.btnPreviewImage.textContent = '👁️';
@@ -1146,23 +1170,36 @@ document.addEventListener('DOMContentLoaded', () => {
         handleFileSelect(e);
     });
 
-    // 4.1 Paste Image
-    document.addEventListener('paste', (e) => {
-        if (state.currentMode !== 'encrypt') return;
-        
-        const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
-        if (!items) return;
-
-        for (let i = 0; i < items.length; i++) {
-            if (items[i].type.indexOf('image/') === 0) {
-                const file = items[i].getAsFile();
-                if (file) {
-                    e.preventDefault();
-                    // Pass a synthetic event object that handleFileSelect expects
+    // 4.1 Paste Image Icon Button (issue 6.1)
+    UI.btnPasteImage.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+            const items = await navigator.clipboard.read();
+            for (let item of items) {
+                const imageTypes = item.types.filter(type => type.startsWith('image/'));
+                if (imageTypes.length > 0) {
+                    const blob = await item.getType(imageTypes[0]);
+                    const file = new File([blob], "pasted-image.png", { type: blob.type });
                     handleFileSelect({ target: { files: [file] } });
+                    return;
                 }
-                break;
             }
+            notify("No image found in clipboard.", "error");
+        } catch (err) {
+            console.error(err);
+            notify("Failed to read clipboard. Please allow permissions.", "error");
+        }
+    });
+
+    // Handle clear invalid state globally (issue 5.1)
+    document.addEventListener('input', (e) => {
+        if (e.target.tagName === 'INPUT') {
+            e.target.classList.remove('invalid');
+            
+            // Handle clear button visibility
+            if (e.target === UI.encryptPassword) toggleClearButton(UI.encryptPassword, UI.btnClearEncryptPass);
+            if (e.target === UI.emojiInput) toggleClearButton(UI.emojiInput, UI.btnClearEmojiInput);
+            if (e.target === UI.decryptPassword) toggleClearButton(UI.decryptPassword, UI.btnClearDecryptPass);
         }
     });
 
