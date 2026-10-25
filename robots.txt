@@ -2,3 +2,4 @@ User-agent: *
 Allow: /
 
 Sitemap: https://mojimask.app/sitemap.xml
+Sitemap: https://mojimask-a3o.pages.dev/sitemap.xml
